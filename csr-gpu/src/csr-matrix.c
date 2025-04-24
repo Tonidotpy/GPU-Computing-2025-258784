@@ -2,9 +2,7 @@
 
 #include <string.h>
 
-extern "C" {
-    #include "arena-allocator-api.h"
-}
+#include "arena-allocator-api.h"
 
 void csr_matrix_init(CsrMatrix_t *mat) {
     if (mat == NULL)

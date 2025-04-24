@@ -2,9 +2,7 @@
 
 #include <string.h>
 
-extern "C" {
-    #include "statistic.h"
-}
+#include "statistic.h"
 
 void profiling_init(ProfilingData *data) {
     if (data == NULL)
@@ -15,7 +13,7 @@ void profiling_init(ProfilingData *data) {
 void profiling_dump(ProfilingData *data) {
     if (data == NULL)
         return;
-    char *prof_fmt = "\n\n    +---------------- SUMMARY --------------------+\n"
+    const char *prof_fmt = "\n\n    +---------------- SUMMARY --------------------+\n"
                      "    |                                             |\n"
                      "    |   Times                                     |\n"
                      "    |     1. Setup:        %13.6f s        |\n"

@@ -42,7 +42,7 @@ const char *logger_color_code[] = {
  * \param fmt String that will be formatted and printed
  * \params args List of arguments needed to format the string
  */
-void _logger_vfprintf(char *file, int line, const LoggerHandler_t *hlogger, LoggerLevel_t log_level, FILE *fp, const char *fmt, va_list args) {
+void _logger_vfprintf(const char *file, int line, const LoggerHandler_t *hlogger, LoggerLevel_t log_level, FILE *fp, const char *fmt, va_list args) {
     if (hlogger == NULL || fp == NULL || fmt == NULL)
         return;
     if (log_level >= LOGGER_LEVEL_COUNT || log_level == LOGGER_LEVEL_NONE)
@@ -85,42 +85,42 @@ void logger_set_colors_enable(LoggerHandler_t *hlogger, bool colors_enable) {
     hlogger->colors_enable = colors_enable;
 }
 
-void _logger_printf(char *file, int line, const LoggerHandler_t *hlogger, LoggerLevel_t log_level, const char *fmt, ...) {
+void _logger_printf(const char *file, int line, const LoggerHandler_t *hlogger, LoggerLevel_t log_level, const char *fmt, ...) {
     va_list args;
     va_start(args, fmt);
     _logger_vfprintf(file, line, hlogger, log_level, stdout, fmt, args);
     va_end(args);
 }
 
-void _logger_fprintf(char *file, int line, const LoggerHandler_t *hlogger, LoggerLevel_t log_level, FILE *fp, const char *fmt, ...) {
+void _logger_fprintf(const char *file, int line, const LoggerHandler_t *hlogger, LoggerLevel_t log_level, FILE *fp, const char *fmt, ...) {
     va_list args;
     va_start(args, fmt);
     _logger_vfprintf(file, line, hlogger, log_level, fp, fmt, args);
     va_end(args);
 }
 
-void _logger_error(char *file, int line, const LoggerHandler_t *hlogger, const char *fmt, ...) {
+void _logger_error(const char *file, int line, const LoggerHandler_t *hlogger, const char *fmt, ...) {
     va_list args;
     va_start(args, fmt);
     _logger_vfprintf(file, line, hlogger, LOGGER_LEVEL_ERROR, stderr, fmt, args);
     va_end(args);
 }
 
-void _logger_warning(char *file, int line, const LoggerHandler_t *hlogger, const char *fmt, ...) {
+void _logger_warning(const char *file, int line, const LoggerHandler_t *hlogger, const char *fmt, ...) {
     va_list args;
     va_start(args, fmt);
     _logger_vfprintf(file, line, hlogger, LOGGER_LEVEL_WARNING, stderr, fmt, args);
     va_end(args);
 }
 
-void _logger_info(char *file, int line, const LoggerHandler_t *hlogger, const char *fmt, ...) {
+void _logger_info(const char *file, int line, const LoggerHandler_t *hlogger, const char *fmt, ...) {
     va_list args;
     va_start(args, fmt);
     _logger_vfprintf(file, line, hlogger, LOGGER_LEVEL_INFO, stdout, fmt, args);
     va_end(args);
 }
 
-void _logger_debug(char *file, int line, const LoggerHandler_t *hlogger, const char *fmt, ...) {
+void _logger_debug(const char *file, int line, const LoggerHandler_t *hlogger, const char *fmt, ...) {
     va_list args;
     va_start(args, fmt);
     _logger_vfprintf(file, line, hlogger, LOGGER_LEVEL_DEBUG, stdout, fmt, args);

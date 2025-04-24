@@ -10,33 +10,39 @@
  */
 #ifdef NLOGGER
 
-#define logger_printf(hlogger, log_level, fmt, ...) do { \
-    UNUSED(hlogger); \
-    UNUSED(log_level); \
-    UNUSED(fmt); \
-} while(0)
-#define logger_fprintf(hlogger, log_level, fp, fmt, ...) do { \
-    UNUSED(hlogger); \
-    UNUSED(log_level); \
-    UNUSED(fp); \
-    UNUSED(fmt); \
-} while(0)
-#define logger_error(hlogger, fmt, ...) do { \
-    UNUSED(hlogger); \
-    UNUSED(fmt); \
-} while(0)
-#define logger_warning(hlogger, fmt, ...) do { \
-    UNUSED(hlogger); \
-    UNUSED(fmt); \
-} while(0)
-#define logger_info(hlogger, fmt, ...) do { \
-    UNUSED(hlogger); \
-    UNUSED(fmt); \
-} while(0)
-#define logger_debug(hlogger, fmt, ...) do { \
-    UNUSED(hlogger); \
-    UNUSED(fmt); \
-} while(0)
+#define logger_printf(hlogger, log_level, fmt, ...) \
+    do {                                            \
+        UNUSED(hlogger);                            \
+        UNUSED(log_level);                          \
+        UNUSED(fmt);                                \
+    } while (0)
+#define logger_fprintf(hlogger, log_level, fp, fmt, ...) \
+    do {                                                 \
+        UNUSED(hlogger);                                 \
+        UNUSED(log_level);                               \
+        UNUSED(fp);                                      \
+        UNUSED(fmt);                                     \
+    } while (0)
+#define logger_error(hlogger, fmt, ...) \
+    do {                                \
+        UNUSED(hlogger);                \
+        UNUSED(fmt);                    \
+    } while (0)
+#define logger_warning(hlogger, fmt, ...) \
+    do {                                  \
+        UNUSED(hlogger);                  \
+        UNUSED(fmt);                      \
+    } while (0)
+#define logger_info(hlogger, fmt, ...) \
+    do {                               \
+        UNUSED(hlogger);               \
+        UNUSED(fmt);                   \
+    } while (0)
+#define logger_debug(hlogger, fmt, ...) \
+    do {                                \
+        UNUSED(hlogger);                \
+        UNUSED(fmt);                    \
+    } while (0)
 
 #else // NLOGGER
 
@@ -119,7 +125,7 @@ void logger_set_colors_enable(LoggerHandler_t *hlogger, bool colors_enable);
  * \param fmt String that will be formatted and printed
  * \params ... Additional parameters needed to format the string
  */
-void _logger_printf(char *file, int line, const LoggerHandler_t *hlogger, LoggerLevel_t log_level, const char *fmt, ...);
+void _logger_printf(const char *file, int line, const LoggerHandler_t *hlogger, LoggerLevel_t log_level, const char *fmt, ...);
 
 /*!
  * \brief Log to the given file
@@ -134,7 +140,7 @@ void _logger_printf(char *file, int line, const LoggerHandler_t *hlogger, Logger
  * \param fmt String that will be formatted and printed
  * \params ... Additional parameters needed to format the string
  */
-void _logger_fprintf(char *file, int line, const LoggerHandler_t *hlogger, LoggerLevel_t log_level, FILE *fp, const char *fmt, ...);
+void _logger_fprintf(const char *file, int line, const LoggerHandler_t *hlogger, LoggerLevel_t log_level, FILE *fp, const char *fmt, ...);
 
 /*!
  * \brief Log an error message to standard error
@@ -145,7 +151,7 @@ void _logger_fprintf(char *file, int line, const LoggerHandler_t *hlogger, Logge
  * \param fmt String that will be formatted and printed
  * \params ... Additional parameters needed to format the string
  */
-void _logger_error(char *file, int line, const LoggerHandler_t *hlogger, const char *fmt, ...);
+void _logger_error(const char *file, int line, const LoggerHandler_t *hlogger, const char *fmt, ...);
 
 /*!
  * \brief Log a warning message to standard error
@@ -156,7 +162,7 @@ void _logger_error(char *file, int line, const LoggerHandler_t *hlogger, const c
  * \param fmt String that will be formatted and printed
  * \params ... Additional parameters needed to format the string
  */
-void _logger_warning(char *file, int line, const LoggerHandler_t *hlogger, const char *fmt, ...);
+void _logger_warning(const char *file, int line, const LoggerHandler_t *hlogger, const char *fmt, ...);
 
 /*!
  * \brief Log an info message to standard output
@@ -167,7 +173,7 @@ void _logger_warning(char *file, int line, const LoggerHandler_t *hlogger, const
  * \param fmt String that will be formatted and printed
  * \params ... Additional parameters needed to format the string
  */
-void _logger_info(char *file, int line, const LoggerHandler_t *hlogger, const char *fmt, ...);
+void _logger_info(const char *file, int line, const LoggerHandler_t *hlogger, const char *fmt, ...);
 
 /*!
  * \brief Log a debug message to standard output
@@ -178,6 +184,6 @@ void _logger_info(char *file, int line, const LoggerHandler_t *hlogger, const ch
  * \param fmt String that will be formatted and printed
  * \params ... Additional parameters needed to format the string
  */
-void _logger_debug(char *file, int line, const LoggerHandler_t *hlogger, const char *fmt, ...);
+void _logger_debug(const char *file, int line, const LoggerHandler_t *hlogger, const char *fmt, ...);
 
 #endif // LOGGER_H

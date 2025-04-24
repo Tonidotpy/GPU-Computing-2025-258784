@@ -6,6 +6,7 @@
 #include <errno.h>
 #include <time.h>
 
+extern "C" {
 #include "config.h"
 #include "common.h"
 #include "logger.h"
@@ -14,6 +15,7 @@
 #include "prof-timer.h"
 #include "csr-matrix.h"
 #include "profiling.h"
+}
 
 LoggerHandler_t hlogger;
 ArenaAllocatorHandler_t harena;
@@ -110,7 +112,7 @@ int *parse_matrix_from_file(char *path) {
 
     // Parse initial banner
     MM_typecode matcode;
-    char *err_msg = "error while processing Matrix Market banner from file\n";
+    const char *err_msg = "error while processing Matrix Market banner from file\n";
     if (mm_read_banner(fp, &matcode) != 0) {
         fclose(fp);
         panic(EXIT_FAILURE, err_msg);
@@ -142,13 +144,13 @@ int *parse_matrix_from_file(char *path) {
         panic(EXIT_FAILURE, err_msg);
     }
 
-    char *info_fmt = "\n\n    +---------- MATRIX INFO ----------+\n"
-                     "    |                                 |\n"
-                     "    |   o Symmetric: %14s   |\n"
-                     "    |   o Rows: %19d   |\n"
-                     "    |   o Columns: %16d   |\n"
-                     "    |   o Non-zeros: %14d   |\n"
-                     "    \\_________________________________/\n\n";
+    const char *info_fmt = "\n\n    +---------- MATRIX INFO ----------+\n"
+                           "    |                                 |\n"
+                           "    |   o Symmetric: %14s   |\n"
+                           "    |   o Rows: %19d   |\n"
+                           "    |   o Columns: %16d   |\n"
+                           "    |   o Non-zeros: %14d   |\n"
+                           "    \\_________________________________/\n\n";
     logger_info(&hlogger, info_fmt, mat.symmetric ? "Yes" : "No", mat.row_count, mat.col_count, mat.nz);
     if (mat.nz > LARGE_MATRIX_NZ_THRESHOLD)
         logger_warning(&hlogger, "loading matrix with a large number of non-zeros!!!\n", "");
@@ -296,7 +298,11 @@ dtype_t *generate_input_vector(int count) {
     return x;
 }
 
-dtype_t *spmv(CsrMatrix_t *mat, dtype_t *x) {
+__global__ void spmv(CsrMatrix_t *mat, dtype_t *x) {
+
+}
+
+dtype_t *dispatch(CsrMatrix_t *mat, dtype_t *x) {
     ProfTimerHandler_t htimer;
     prof_timer_init(&htimer);
 
@@ -420,7 +426,7 @@ int main(int argc, char *argv[]) {
     dtype_t *x = generate_input_vector(mat.col_count);
 
     /*  6. Calculate matrix-vector product                                   */
-    dtype_t *y = spmv(&mat, x);
+    dtype_t *y = dispatch(&mat, x);
 
     /*  7. Print results                                                     */
     profiling_dump(&prof_data);
