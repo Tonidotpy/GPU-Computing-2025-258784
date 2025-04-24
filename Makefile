@@ -2,7 +2,7 @@ LIB_DIR := lib
 LIB_BUILD_DIR := $(LIB_DIR)/build
 
 PROJECTS := $(shell find . -mindepth 1 -maxdepth 1 -type d)
-PROJECTS := $(filter-out ./data ./.cache ./$(LIB_DIR), $(PROJECTS))
+PROJECTS := $(filter-out ./.git ./data ./.cache ./$(LIB_DIR), $(PROJECTS))
 
 LIBS := $(shell find $(LIB_DIR) -mindepth 1 -maxdepth 1 -type d)
 LIBS := $(filter-out $(LIB_DIR)/build, $(LIBS))
