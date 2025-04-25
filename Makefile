@@ -37,7 +37,12 @@ $(LIBS): %: $(LIB_BUILD_DIR)
 $(LIB_BUILD_DIR):
 	mkdir -p $@
 
+define \n
+
+
+endef
+
 .PHONY: clean
 clean:
 	rm -fr $(LIB_BUILD_DIR)
-	$(foreach project, $(PROJECTS), cd $(project) && make clean)
+	$(foreach project, $(PROJECTS), cd $(project) && make clean${\n})

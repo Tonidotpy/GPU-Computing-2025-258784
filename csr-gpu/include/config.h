@@ -32,9 +32,7 @@
 #endif // TITER
 
 /*! Dump the output array values to file */
-#ifndef DUMP_OUTPUT
-#define DUMP_OUTPUT (true)
-#endif // DUMP_OUTPUT
+// #define DUMP_OUTPUT
 
 /*! \brief matrices and vectors data type */
 typedef float dtype_t;

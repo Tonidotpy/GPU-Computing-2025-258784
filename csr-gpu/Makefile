@@ -1,7 +1,7 @@
 CC := gcc
 NVCC := nvcc
 
-TARGET := SpVM
+TARGET := SpMV
 
 BUILD_DIR := build
 SRC_DIR := src
@@ -19,14 +19,18 @@ C_OBJECTS += $(wildcard $(LIB_BUILD_DIR)/*.o)
 CU_OBJECTS := $(CU_SOURCES:%.cu=$(BUILD_DIR)/%.o)
 
 ifeq ($(DEBUG),1)
-OPT := -Og -g2 -ggdb2
+COPT := -Og -g2 -ggdb2
+CUOPT := -g -G
 else
-OPT := -O2
+COPT := -O2
+CUOPT := -O2
 endif
 
+CUOPT += -diag-suppress 550
+
 IFLAGS := $(addprefix -I, $(INCLUDES))
-CFLAGS := $(IFLAGS) $(OPT) -Wall -Wextra -Wpedantic -Werror
-CUFLAGS := $(IFLAGS) $(OPT) -Werror=all-warnings
+CFLAGS := $(IFLAGS) $(COPT) -Wall -Wextra -Wpedantic -Werror
+CUFLAGS := $(IFLAGS) $(CUOPT) -Werror=all-warnings
 LDFLAGS := -lm
 
 ifeq ($(NLOGGER),1)

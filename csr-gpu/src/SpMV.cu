@@ -43,7 +43,7 @@ void panic(int exit_code, const char *fmt, ...) {
         vfprintf(out, fmt, args);
         va_end(args);
     }
-    _exit(exit_code);
+    exit(exit_code);
 }
 
 /*!

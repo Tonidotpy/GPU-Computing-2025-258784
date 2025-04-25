@@ -1,5 +1,5 @@
 #!/bin/bash
-#SBATCH --partition=edu5
+#SBATCH --partition=edu-short
 #SBATCH --nodes=1
 #SBATCH --tasks=1
 #SBATCH --gres=gpu:1
@@ -9,5 +9,5 @@
 #SBATCH --output=test-%j.out
 #SBATCH --error=test-%j.err
 
-module load cuda/12.1
-srun build/SpVM ../data/identity.mtx
+module load CUDA/12.1
+srun build/SpMV ../data/identity.mtx
