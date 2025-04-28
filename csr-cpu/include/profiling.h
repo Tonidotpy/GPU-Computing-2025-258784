@@ -26,7 +26,7 @@ typedef struct _ProfilingData {
         second_t t[TITER];
     } tspmv;
 
-    int flop;
+    dsize_t flop;
 } ProfilingData;
 
 /*!

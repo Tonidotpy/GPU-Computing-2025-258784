@@ -48,7 +48,4 @@
     b = c; \
 } while(0)
 
-/*! Type definition for time in seconds */
-typedef double second_t;
-
 #endif // COMMON_H

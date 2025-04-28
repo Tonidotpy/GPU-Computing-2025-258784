@@ -91,7 +91,7 @@ void setup(void) {
  *
  * \param path The path of the file to parse
  */
-int *parse_matrix_from_file(char *path) {
+dsize_t *parse_matrix_from_file(char *path) {
     ProfTimerHandler_t htimer;
     prof_timer_init(&htimer);
 
@@ -136,11 +136,15 @@ int *parse_matrix_from_file(char *path) {
 
     // Get matrix info
     err_msg = "error while processing Matrix Market data from file\n";
-    if (mm_read_mtx_crd_size(fp, &mat.row_count, &mat.col_count, &mat.nz) != 0) {
+    int row_count, col_count, nz;
+    if (mm_read_mtx_crd_size(fp, &row_count, &col_count, &nz) != 0) {
         logger_error(&hlogger, "could not process Matrix Market coordinate size\n", "");
         fclose(fp);
         panic(EXIT_FAILURE, err_msg);
     }
+    mat.row_count = row_count;
+    mat.col_count = col_count;
+    mat.nz = nz;
 
     char *info_fmt = "\n\n    +---------- MATRIX INFO ----------+\n"
                      "    |                                 |\n"
@@ -157,8 +161,8 @@ int *parse_matrix_from_file(char *path) {
     prof_timer_start(&htim_parse);
 
     logger_info(&hlogger, "allocating memory for the matrix...\n", "");
-    mat.rows = (int *)arena_allocator_api_calloc(&harena, sizeof(*mat.rows), mat.nz);
-    mat.cols = (int *)arena_allocator_api_calloc(&harena, sizeof(*mat.cols), mat.nz);
+    mat.rows = (dsize_t *)arena_allocator_api_calloc(&harena, sizeof(*mat.rows), mat.nz);
+    mat.cols = (dsize_t *)arena_allocator_api_calloc(&harena, sizeof(*mat.cols), mat.nz);
     mat.data = (dtype_t *)arena_allocator_api_calloc(&harena, sizeof(*mat.data), mat.nz);
     if (mat.rows == NULL || mat.cols == NULL || mat.data == NULL) {
         logger_error(&hlogger, "could not allocate enough memory for the matrix data\n", "");
@@ -173,11 +177,11 @@ int *parse_matrix_from_file(char *path) {
     prof_data.tparse.allocation = prof_timer_elapsed(&htim_parse);
 
     // Allocate memory needed to later sort the rows
-    int *sorted_row_idx = (int *)arena_allocator_api_calloc(&harena, sizeof(*sorted_row_idx), mat.nz);
+    dsize_t *sorted_row_idx = (dsize_t *)arena_allocator_api_calloc(&harena, sizeof(*sorted_row_idx), mat.nz);
 
     // Parse matrix data from file line by line
     logger_info(&hlogger, "parsing Matrix Market file data...\n", "");
-    for (int i = 0; i < mat.nz; ++i) {
+    for (dsize_t i = 0; i < mat.nz; ++i) {
         int r, c;
         double real = 1, imm = 1;
 
@@ -205,12 +209,12 @@ int *parse_matrix_from_file(char *path) {
 
         // Sort indices based on rows and columns values
         sorted_row_idx[i] = i;
-        for (int j = i - 1; j >= 0; --j) {
-            int idx = sorted_row_idx[j];
-            int row = mat.rows[idx];
-            int col = mat.cols[idx];
+        for (dint_t j = i - 1; j >= 0; --j) {
+            dsize_t idx = sorted_row_idx[j];
+            dsize_t row = mat.rows[idx];
+            dsize_t col = mat.cols[idx];
             if (mat.rows[i] < row || (mat.rows[i] == row && mat.cols[i] < col))
-                SWAP(int, sorted_row_idx[j], sorted_row_idx[j + 1]);
+                SWAP(dsize_t, sorted_row_idx[j], sorted_row_idx[j + 1]);
             else
                 break;
         }
@@ -229,7 +233,7 @@ int *parse_matrix_from_file(char *path) {
     return sorted_row_idx;
 }
 
-void construct_csr_matrix(int *sorted_row_idx) {
+void construct_csr_matrix(dsize_t *sorted_row_idx) {
     ProfTimerHandler_t htimer;
     prof_timer_init(&htimer);
 
@@ -243,24 +247,24 @@ void construct_csr_matrix(int *sorted_row_idx) {
     prof_timer_start(&htim_csr);
 
     // Auxiliary array needed to sort the matrix row indices
-    int *aux = (int *)arena_allocator_api_calloc(&harena, sizeof(*aux), mat.nz);
-    for (int i = 0; i < mat.nz; ++i) {
-        int idx = sorted_row_idx[i];
+    dsize_t *aux = (dsize_t *)arena_allocator_api_calloc(&harena, sizeof(*aux), mat.nz);
+    for (dsize_t i = 0; i < mat.nz; ++i) {
+        dsize_t idx = sorted_row_idx[i];
         aux[idx] = i;
     }
 
-    int *rows = mat.rows;
-    mat.rows = (int *)arena_allocator_api_calloc(&harena, sizeof(*mat.rows), mat.row_count + 1);
+    dsize_t *rows = mat.rows;
+    mat.rows = (dsize_t *)arena_allocator_api_calloc(&harena, sizeof(*mat.rows), mat.row_count + 1);
     memset(mat.rows, 0, sizeof(*mat.rows) * (mat.row_count + 1));
-    for (int i = 0; i < mat.nz; ++i) {
-        int j = aux[i];
-        int idx = sorted_row_idx[i];
+    for (dsize_t i = 0; i < mat.nz; ++i) {
+        dsize_t j = aux[i];
+        dsize_t idx = sorted_row_idx[i];
         if (i != j) {
-            SWAP(int, rows[i], rows[idx]);
-            SWAP(int, mat.cols[i], mat.cols[idx]);
+            SWAP(dsize_t, rows[i], rows[idx]);
+            SWAP(dsize_t, mat.cols[i], mat.cols[idx]);
             SWAP(dtype_t, mat.data[i], mat.data[idx]);
             sorted_row_idx[j] = idx;
-            SWAP(int, aux[i], aux[idx]);
+            SWAP(dsize_t, aux[i], aux[idx]);
         }
     }
 
@@ -280,14 +284,14 @@ void construct_csr_matrix(int *sorted_row_idx) {
     prof_data.tcsr.total = prof_timer_elapsed(&htimer);
 }
 
-dtype_t *generate_input_vector(int count) {
+dtype_t *generate_input_vector(dsize_t count) {
     ProfTimerHandler_t htimer;
     prof_timer_init(&htimer);
     prof_timer_start(&htimer);
 
     logger_info(&hlogger, "generating input vector...\n", "");
     dtype_t *x = (dtype_t *)arena_allocator_api_calloc(&harena, sizeof(*x), count);
-    for (int i = 0; i < count; ++i) {
+    for (dsize_t i = 0; i < count; ++i) {
         x[i] = (rand() % RAND_MAX) / 1e6;
     }
 
@@ -308,15 +312,15 @@ dtype_t *spmv(CsrMatrix_t *mat, dtype_t *x) {
     logger_info(&hlogger, "calculating sparse matrix vector product...\n", "");
     dtype_t *y = (dtype_t *)arena_allocator_api_calloc(&harena, sizeof(*y), mat->row_count);
 
-    for (int i = -TSKIP; i < TITER; ++i) {
+    for (dint_t i = -TSKIP; i < TITER; ++i) {
         memset(y, 0, mat->row_count * sizeof(*y));
 
         if (i >= 0)
             prof_timer_start(&htim_spmv);
 
-        for (int r = 0; r < mat->row_count; ++r) {
-            for (int j = mat->rows[r]; j < mat->rows[r + 1]; ++j) {
-                int c = mat->cols[j];
+        for (dsize_t r = 0; r < mat->row_count; ++r) {
+            for (dsize_t j = mat->rows[r]; j < mat->rows[r + 1]; ++j) {
+                dsize_t c = mat->cols[j];
 
                 if (i == -TSKIP)
                     prof_data.flop += 2;
@@ -343,8 +347,8 @@ dtype_t *spmv(CsrMatrix_t *mat, dtype_t *x) {
     return y;
 }
 
-void output_dump(char filename[128], dtype_t *y, int count) {
-    const int len = 256;
+void output_dump(char filename[128], dtype_t *y, dsize_t count) {
+    const dsize_t len = 256;
     char path[len];
     memset(path, 0, len * sizeof(*path));
     strncpy(path, filename, 128);
@@ -380,7 +384,7 @@ void output_dump(char filename[128], dtype_t *y, int count) {
     }
 
     // Write data
-    for (int i = 0; i < count; ++i) {
+    for (dsize_t i = 0; i < count; ++i) {
         if (fprintf(fp, "%.f\n", y[i]) < 0) {
             logger_error(&hlogger, "failed to write output data to file\n", "");
             fclose(fp);
@@ -411,7 +415,7 @@ int main(int argc, char *argv[]) {
     setup();
 
     /*  3. Read matrix from file                                             */
-    int *sorted_row_idx = parse_matrix_from_file(argv[1]);
+    dsize_t *sorted_row_idx = parse_matrix_from_file(argv[1]);
 
     /*  4. Construct matrix with CSR format                                  */
     construct_csr_matrix(sorted_row_idx);
@@ -426,7 +430,7 @@ int main(int argc, char *argv[]) {
     profiling_dump(&prof_data);
 
 #ifdef DUMP_OUTPUT
-    const int len = 128;
+    const dsize_t len = 128;
     char filename[len];
     memset(filename, 0, len * sizeof(*filename));
     strncpy(filename, "input-dump", len);
