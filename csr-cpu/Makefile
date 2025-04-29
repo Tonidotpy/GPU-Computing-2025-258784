@@ -4,7 +4,7 @@ BUILD_DIR := build
 SRC_DIR := src
 INCLUDE_DIR := include
 LIB_DIR ?= ../lib
-LIB_BUILD_DIR := $(LIB_DIR)/build
+LIB_BUILD_DIR := $(LIB_DIR)/cbuild
 LIB_INCLUDES := $(shell find $(LIB_DIR) -name include -type d)
 
 SOURCES := $(wildcard $(SRC_DIR)/*.c)

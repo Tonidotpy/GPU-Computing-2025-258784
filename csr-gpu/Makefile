@@ -7,7 +7,8 @@ BUILD_DIR := build
 SRC_DIR := src
 INCLUDE_DIR := include
 LIB_DIR ?= ../lib
-LIB_BUILD_DIR := $(LIB_DIR)/build
+CLIB_BUILD_DIR := $(LIB_DIR)/cbuild
+CULIB_BUILD_DIR := $(LIB_DIR)/cubuild
 LIB_INCLUDES := $(shell find $(LIB_DIR) -name include -type d)
 
 C_SOURCES := $(wildcard $(SRC_DIR)/*.c)
@@ -15,8 +16,9 @@ CU_SOURCES := $(wildcard $(SRC_DIR)/*.cu)
 INCLUDES := $(shell find $(INCLUDE_DIR) -type d)
 INCLUDES += $(LIB_INCLUDES)
 C_OBJECTS := $(C_SOURCES:%.c=$(BUILD_DIR)/%.o)
-C_OBJECTS += $(wildcard $(LIB_BUILD_DIR)/*.o)
+C_OBJECTS += $(wildcard $(CLIB_BUILD_DIR)/*.o)
 CU_OBJECTS := $(CU_SOURCES:%.cu=$(BUILD_DIR)/%.o)
+CU_OBJECTS += $(wildcard $(CULIB_BUILD_DIR)/*.o)
 
 ifeq ($(DEBUG),1)
 COPT := -Og -g2 -ggdb2

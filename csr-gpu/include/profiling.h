@@ -23,10 +23,11 @@ typedef struct _ProfilingData {
     second_t tgen;
     struct {
         second_t total;
+        second_t allocation;
         second_t t[TITER];
     } tspmv;
 
-    int flop;
+    dsize_t flop;
 } ProfilingData;
 
 /*!

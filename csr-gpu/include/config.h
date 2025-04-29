@@ -1,6 +1,8 @@
 #ifndef CONFIG_H
 #define CONFIG_H
 
+#include <stdint.h>
+
 #include "logger.h"
 
 /*! Default logger log level */
@@ -36,5 +38,12 @@
 
 /*! \brief matrices and vectors data type */
 typedef float dtype_t;
+
+/*! \brief integer data types */
+typedef uint64_t dsize_t;
+typedef int64_t dint_t;
+
+/*! Type definition for time in seconds */
+typedef double second_t;
 
 #endif // CONFIG_H

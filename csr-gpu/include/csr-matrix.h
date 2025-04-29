@@ -18,10 +18,10 @@
  */
 typedef struct _CsrMatrix_t {
     bool symmetric;
-    int row_count, col_count, nz;
+    dsize_t row_count, col_count, nz;
 
-    int *rows;
-    int *cols;
+    dsize_t *rows;
+    dsize_t *cols;
     dtype_t *data;
 } CsrMatrix_t;
 
@@ -47,6 +47,6 @@ bool csr_is_symmetric(CsrMatrix_t *mat);
  * \param mat A pointer to the matrix structure
  * \param sorted_rows The array of sorted row indices
  */
-void csr_pack(CsrMatrix_t *mat, int *sorted_rows);
+void csr_pack(CsrMatrix_t *mat, dsize_t *sorted_rows);
 
 #endif // CSR_MATRIX_H

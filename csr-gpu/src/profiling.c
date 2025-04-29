@@ -26,9 +26,10 @@ void profiling_dump(ProfilingData *data) {
                      "    |       b. Packing:    %13.6f s        |\n"
                      "    |     4. Input:        %13.6f s        |\n"
                      "    |     5. SpMV:         %13.6f s        |\n"
-                     "    |       a. Mean:       %13.6f s        |\n"
-                     "    |       b. Variance:   %13.6f          |\n"
-                     "    |       c. FLOPs:      %13.6f TFLOP/s  |\n"
+                     "    |       a. Allocation: %13.6f s        |\n"
+                     "    |       b. Mean:       %13.6f s        |\n"
+                     "    |       c. Variance:   %13.6f          |\n"
+                     "    |       d. FLOPs:      %13.6f TFLOP/s  |\n"
                      "    \\_____________________________________________/\n\n";
 
     double mu = gmean(data->tspmv.t, TITER);
@@ -46,6 +47,7 @@ void profiling_dump(ProfilingData *data) {
         data->tcsr.pack,
         data->tgen,
         data->tspmv.total,
+        data->tspmv.allocation,
         mu,
         sigma,
         throughput

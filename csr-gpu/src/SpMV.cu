@@ -17,6 +17,8 @@ extern "C" {
 #include "profiling.h"
 }
 
+#include "cuda-timer.h"
+
 LoggerHandler_t hlogger;
 ArenaAllocatorHandler_t harena;
 CsrMatrix_t mat;
@@ -93,7 +95,7 @@ void setup(void) {
  *
  * \param path The path of the file to parse
  */
-int *parse_matrix_from_file(char *path) {
+dsize_t *parse_matrix_from_file(char *path) {
     ProfTimerHandler_t htimer;
     prof_timer_init(&htimer);
 
@@ -138,11 +140,15 @@ int *parse_matrix_from_file(char *path) {
 
     // Get matrix info
     err_msg = "error while processing Matrix Market data from file\n";
-    if (mm_read_mtx_crd_size(fp, &mat.row_count, &mat.col_count, &mat.nz) != 0) {
+    int row_count, col_count, nz;
+    if (mm_read_mtx_crd_size(fp, &row_count, &col_count, &nz) != 0) {
         logger_error(&hlogger, "could not process Matrix Market coordinate size\n", "");
         fclose(fp);
         panic(EXIT_FAILURE, err_msg);
     }
+    mat.row_count = row_count;
+    mat.col_count = col_count;
+    mat.nz = nz;
 
     const char *info_fmt = "\n\n    +---------- MATRIX INFO ----------+\n"
                            "    |                                 |\n"
@@ -159,8 +165,8 @@ int *parse_matrix_from_file(char *path) {
     prof_timer_start(&htim_parse);
 
     logger_info(&hlogger, "allocating memory for the matrix...\n", "");
-    mat.rows = (int *)arena_allocator_api_calloc(&harena, sizeof(*mat.rows), mat.nz);
-    mat.cols = (int *)arena_allocator_api_calloc(&harena, sizeof(*mat.cols), mat.nz);
+    mat.rows = (dsize_t *)arena_allocator_api_calloc(&harena, sizeof(*mat.rows), mat.nz);
+    mat.cols = (dsize_t *)arena_allocator_api_calloc(&harena, sizeof(*mat.cols), mat.nz);
     mat.data = (dtype_t *)arena_allocator_api_calloc(&harena, sizeof(*mat.data), mat.nz);
     if (mat.rows == NULL || mat.cols == NULL || mat.data == NULL) {
         logger_error(&hlogger, "could not allocate enough memory for the matrix data\n", "");
@@ -175,11 +181,11 @@ int *parse_matrix_from_file(char *path) {
     prof_data.tparse.allocation = prof_timer_elapsed(&htim_parse);
 
     // Allocate memory needed to later sort the rows
-    int *sorted_row_idx = (int *)arena_allocator_api_calloc(&harena, sizeof(*sorted_row_idx), mat.nz);
+    dsize_t *sorted_row_idx = (dsize_t *)arena_allocator_api_calloc(&harena, sizeof(*sorted_row_idx), mat.nz);
 
     // Parse matrix data from file line by line
     logger_info(&hlogger, "parsing Matrix Market file data...\n", "");
-    for (int i = 0; i < mat.nz; ++i) {
+    for (dsize_t i = 0; i < mat.nz; ++i) {
         int r, c;
         double real = 1, imm = 1;
 
@@ -203,16 +209,25 @@ int *parse_matrix_from_file(char *path) {
         mat.cols[i] = c - 1;
         mat.data[i] = real;
 
+        /*
+         * Update floating point operation count
+         * The operation are a multiplication and an addition for each non-zero
+         * Symmetric matrices has to be taken in account
+         */
+        prof_data.flop += 2U;
+        if (csr_is_symmetric(&mat))
+            prof_data.flop += 2U;
+
         prof_timer_start(&htim_parse);
 
         // Sort indices based on rows and columns values
         sorted_row_idx[i] = i;
-        for (int j = i - 1; j >= 0; --j) {
-            int idx = sorted_row_idx[j];
-            int row = mat.rows[idx];
-            int col = mat.cols[idx];
+        for (dint_t j = i - 1; j >= 0; --j) {
+            dsize_t idx = sorted_row_idx[j];
+            dsize_t row = mat.rows[idx];
+            dsize_t col = mat.cols[idx];
             if (mat.rows[i] < row || (mat.rows[i] == row && mat.cols[i] < col))
-                SWAP(int, sorted_row_idx[j], sorted_row_idx[j + 1]);
+                SWAP(dsize_t, sorted_row_idx[j], sorted_row_idx[j + 1]);
             else
                 break;
         }
@@ -231,7 +246,7 @@ int *parse_matrix_from_file(char *path) {
     return sorted_row_idx;
 }
 
-void construct_csr_matrix(int *sorted_row_idx) {
+void construct_csr_matrix(dsize_t *sorted_row_idx) {
     ProfTimerHandler_t htimer;
     prof_timer_init(&htimer);
 
@@ -245,24 +260,25 @@ void construct_csr_matrix(int *sorted_row_idx) {
     prof_timer_start(&htim_csr);
 
     // Auxiliary array needed to sort the matrix row indices
-    int *aux = (int *)arena_allocator_api_calloc(&harena, sizeof(*aux), mat.nz);
-    for (int i = 0; i < mat.nz; ++i) {
-        int idx = sorted_row_idx[i];
+    dsize_t *aux = (dsize_t *)arena_allocator_api_calloc(&harena, sizeof(*aux), mat.nz);
+    for (dsize_t i = 0; i < mat.nz; ++i) {
+        dsize_t idx = sorted_row_idx[i];
         aux[idx] = i;
     }
 
-    int *rows = mat.rows;
-    mat.rows = (int *)arena_allocator_api_calloc(&harena, sizeof(*mat.rows), mat.row_count + 1);
+    // Sort rows
+    dsize_t *rows = mat.rows;
+    mat.rows = (dsize_t *)arena_allocator_api_calloc(&harena, sizeof(*mat.rows), mat.row_count + 1);
     memset(mat.rows, 0, sizeof(*mat.rows) * (mat.row_count + 1));
-    for (int i = 0; i < mat.nz; ++i) {
-        int j = aux[i];
-        int idx = sorted_row_idx[i];
+    for (dsize_t i = 0; i < mat.nz; ++i) {
+        dsize_t j = aux[i];
+        dsize_t idx = sorted_row_idx[i];
         if (i != j) {
-            SWAP(int, rows[i], rows[idx]);
-            SWAP(int, mat.cols[i], mat.cols[idx]);
+            SWAP(dsize_t, rows[i], rows[idx]);
+            SWAP(dsize_t, mat.cols[i], mat.cols[idx]);
             SWAP(dtype_t, mat.data[i], mat.data[idx]);
             sorted_row_idx[j] = idx;
-            SWAP(int, aux[i], aux[idx]);
+            SWAP(dsize_t, aux[i], aux[idx]);
         }
     }
 
@@ -282,14 +298,14 @@ void construct_csr_matrix(int *sorted_row_idx) {
     prof_data.tcsr.total = prof_timer_elapsed(&htimer);
 }
 
-dtype_t *generate_input_vector(int count) {
+dtype_t *generate_input_vector(dsize_t count) {
     ProfTimerHandler_t htimer;
     prof_timer_init(&htimer);
     prof_timer_start(&htimer);
 
     logger_info(&hlogger, "generating input vector...\n", "");
     dtype_t *x = (dtype_t *)arena_allocator_api_calloc(&harena, sizeof(*x), count);
-    for (int i = 0; i < count; ++i) {
+    for (dsize_t i = 0; i < count; ++i) {
         x[i] = (rand() % RAND_MAX) / 1e6;
     }
 
@@ -298,59 +314,116 @@ dtype_t *generate_input_vector(int count) {
     return x;
 }
 
-__global__ void spmv(CsrMatrix_t *mat, dtype_t *x) {
+__global__ void spmv(CsrMatrix_t *mat, dtype_t *x, dtype_t *y) {
+    const dsize_t batch_size = gridDim.x; 
+    const dsize_t stride = blockDim.x;
+    const dsize_t block = blockIdx.x;
+    const dsize_t idx = threadIdx.x;
 
+    /*
+     * Iteration needed only if the total number of threads is not sufficient
+     * to cover all matrix rows
+     */
+    const dsize_t threads_count = (batch_size * stride);
+    const dsize_t grids = mat->row_count / threads_count;
+    for (dsize_t j = 0; j < grids; ++j) {
+        const dsize_t off = j * threads_count;
+        const dsize_t r = off + block * stride + idx;
+
+        /*
+         * Iterate over the columns
+         */
+        const dsize_t i0 = mat->rows[r];
+        for (dsize_t i = i0; i < mat->rows[r + 1]; ++i) {
+            const dsize_t c = mat->cols[i];
+            y[r] = y[r] + mat->data[i] * x[c];
+            if (mat->symmetric && r != c) {
+                y[c] = y[c] + mat->data[i] * x[r];
+            }
+        }
+    }
 }
 
 dtype_t *dispatch(CsrMatrix_t *mat, dtype_t *x) {
     ProfTimerHandler_t htimer;
     prof_timer_init(&htimer);
 
-    ProfTimerHandler_t htim_spmv;
-    prof_timer_init(&htim_spmv);
+    CudaTimerHandler_t htim_spmv;
+    cuda_timer_init(&htim_spmv);
 
     prof_timer_start(&htimer);
 
     logger_info(&hlogger, "calculating sparse matrix vector product...\n", "");
+
+    ProfTimerHandler_t htim_alloc;
+    prof_timer_init(&htim_alloc);
+    prof_timer_start(&htim_alloc);
+
+    CsrMatrix_t *d_mat;
+    dsize_t *d_rows, *d_cols;
+    dtype_t *d_data, *d_x, *d_y;
+    cudaMallocManaged(&d_mat, sizeof(*d_mat));
+    cudaMalloc(&d_rows, (mat->row_count + 1) * sizeof(*d_rows));
+    cudaMalloc(&d_cols, mat->nz * sizeof(*d_cols));
+    cudaMalloc(&d_data, mat->nz * sizeof(*d_data));
+    cudaMalloc(&d_x, mat->col_count * sizeof(*d_x));
+    cudaMalloc(&d_y, mat->row_count * sizeof(*d_y));
+
+    cudaMemcpy(d_mat, mat, sizeof(*d_mat), cudaMemcpyHostToDevice);
+    cudaMemcpy(d_rows, mat->rows, (mat->row_count + 1) * sizeof(*d_rows), cudaMemcpyHostToDevice);
+    cudaMemcpy(d_cols, mat->cols, mat->nz * sizeof(*d_cols), cudaMemcpyHostToDevice);
+    cudaMemcpy(d_data, mat->data, mat->nz * sizeof(*d_data), cudaMemcpyHostToDevice);
+    cudaMemcpy(d_x, x, mat->col_count * sizeof(*d_x), cudaMemcpyHostToDevice);
+
+    d_mat->rows = d_rows;
+    d_mat->cols = d_cols;
+    d_mat->data = d_data;
+
     dtype_t *y = (dtype_t *)arena_allocator_api_calloc(&harena, sizeof(*y), mat->row_count);
 
-    for (int i = -TSKIP; i < TITER; ++i) {
-        memset(y, 0, mat->row_count * sizeof(*y));
+    prof_timer_stop(&htim_alloc);
+    prof_data.tspmv.allocation = prof_timer_elapsed(&htim_alloc);
 
-        if (i >= 0)
-            prof_timer_start(&htim_spmv);
+    logger_debug(&hlogger, "rows: host %p = device %p [%s]\n", mat->rows, d_rows, mat->rows == d_rows ? "EQUAL" : "NOT EQUAL");
+    logger_debug(&hlogger, "cols: host %p = device %p [%s]\n", mat->cols, d_cols, mat->cols == d_cols ? "EQUAL" : "NOT EQUAL");
+    logger_debug(&hlogger, "data: host %p = device %p [%s]\n", mat->data, d_data, mat->data == d_data ? "EQUAL" : "NOT EQUAL");
 
-        for (int r = 0; r < mat->row_count; ++r) {
-            for (int j = mat->rows[r]; j < mat->rows[r + 1]; ++j) {
-                int c = mat->cols[j];
+    // TODO: Change number of blocks
+    const dsize_t blocks = 1;
+    const dsize_t threads_per_block = MIN(MAX_THREAD_COUNT, mat->row_count / blocks);
+    for (dint_t i = -TSKIP; i < TITER; ++i) {
+        cudaMemset(d_y, 0, mat->row_count * sizeof(*y));
 
-                if (i == -TSKIP)
-                    prof_data.flop += 2;
-                y[r] += mat->data[j] * x[c];
-
-                // Calculate product for symmetric matrices
-                if (csr_is_symmetric(mat) && r != c) {
-                    if (i == -TSKIP)
-                        prof_data.flop += 2;
-                    y[c] += mat->data[j] * x[r];
-                }
-            }
-        }
+        cuda_timer_start(&htim_spmv);
+        spmv<<<blocks, threads_per_block>>>(d_mat, d_x, d_y);
+        cuda_timer_synchronize(&htim_spmv);
+        cuda_timer_stop(&htim_spmv);
 
         if (i >= 0) {
-            prof_timer_stop(&htim_spmv);
-            prof_data.tspmv.t[i] = prof_timer_elapsed(&htim_spmv);
+            prof_data.tspmv.t[i] = cuda_timer_elapsed(&htim_spmv);
             logger_debug(&hlogger, "iteration %d: %2.5f s\n", i + 1, prof_data.tspmv.t[i]);
+        }
+        else {
+            logger_debug(&hlogger, "warm-up %d: %2.5f s\n", TSKIP + i + 1, cuda_timer_elapsed(&htim_spmv));
         }
     }
 
+    // Copy result to host
+    cudaMemcpy(y, d_y, mat->row_count * sizeof(*y), cudaMemcpyDeviceToHost);
+
     prof_timer_stop(&htimer);
     prof_data.tspmv.total = prof_timer_elapsed(&htimer);
+
+    cuda_timer_deinit(&htim_spmv);
+    cudaFree(d_mat);
+    cudaFree(d_rows);
+    cudaFree(d_cols);
+    cudaFree(d_data);
     return y;
 }
 
-void output_dump(char filename[128], dtype_t *y, int count) {
-    const int len = 256;
+void output_dump(char filename[128], dtype_t *y, dsize_t count) {
+    const dsize_t len = 256;
     char path[len];
     memset(path, 0, len * sizeof(*path));
     strncpy(path, filename, 128);
@@ -386,7 +459,7 @@ void output_dump(char filename[128], dtype_t *y, int count) {
     }
 
     // Write data
-    for (int i = 0; i < count; ++i) {
+    for (dsize_t i = 0; i < count; ++i) {
         if (fprintf(fp, "%.f\n", y[i]) < 0) {
             logger_error(&hlogger, "failed to write output data to file\n", "");
             fclose(fp);
@@ -417,7 +490,7 @@ int main(int argc, char *argv[]) {
     setup();
 
     /*  3. Read matrix from file                                             */
-    int *sorted_row_idx = parse_matrix_from_file(argv[1]);
+    dsize_t *sorted_row_idx = parse_matrix_from_file(argv[1]);
 
     /*  4. Construct matrix with CSR format                                  */
     construct_csr_matrix(sorted_row_idx);
@@ -432,7 +505,7 @@ int main(int argc, char *argv[]) {
     profiling_dump(&prof_data);
 
 #ifdef DUMP_OUTPUT
-    const int len = 128;
+    const dsize_t len = 128;
     char filename[len];
     memset(filename, 0, len * sizeof(*filename));
     strncpy(filename, "input-dump", len);

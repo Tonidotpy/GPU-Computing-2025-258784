@@ -2,6 +2,14 @@
 #define CUDA_TIMER_H
 
 /*!
+ * \brief Time conversion constants
+ */
+#define US_TO_S (1.0 / 1e6)
+#define MS_TO_S (1.0 / 1e3)
+#define S_TO_US (1e6)
+#define S_TO_MS (1e3)
+
+/*!
  * \brief Cuda profiling timer handler structure
  *
  * \var start Cuda event of the timer start
@@ -32,6 +40,13 @@ void cuda_timer_start(CudaTimerHandler_t *htimer);
  * \param htimer A pointer to the timer handler
  */
 void cuda_timer_stop(CudaTimerHandler_t *htimer);
+
+/*!
+ * \brief Synchronize cuda threads and events
+ *
+ * \param htimr A pointer to the timer handler
+ */
+void cuda_timer_synchronize(CudaTimerHandler_t *htimer);
 
 /*!
  * \brief Get the elapsed time of the timer

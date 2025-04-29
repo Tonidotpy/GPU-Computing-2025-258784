@@ -1,7 +1,11 @@
 #ifndef COMMON_H
 #define COMMON_H
 
-#include "logger.h"
+/*!
+ * GPU limits
+ */
+#define MAX_THREAD_COUNT (1024U)
+#define MAX_BLOCK_COUNT (1024U * 1024U * 64U)
 
 /*!
  * \brief No OPeration, does nothing
@@ -47,8 +51,5 @@
     a = b; \
     b = c; \
 } while(0)
-
-/*! Type definition for time in seconds */
-typedef double second_t;
 
 #endif // COMMON_H

@@ -253,6 +253,7 @@ void construct_csr_matrix(dsize_t *sorted_row_idx) {
         aux[idx] = i;
     }
 
+    // Sort rows
     dsize_t *rows = mat.rows;
     mat.rows = (dsize_t *)arena_allocator_api_calloc(&harena, sizeof(*mat.rows), mat.row_count + 1);
     memset(mat.rows, 0, sizeof(*mat.rows) * (mat.row_count + 1));

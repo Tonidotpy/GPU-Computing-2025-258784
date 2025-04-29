@@ -6,5 +6,7 @@
 #SBATCH --cpus-per-task=1
 #SBATCH --time=00:05:00
 #SBATCH --job-name=csr-cpu-spmv
+#SBATCH --output=test-%j.out
+#SBATCH --error=test-%j.err
 
-srun build/SpMV ../data/identity.mtx
+srun build/SpMV ../data/bcsstk32.mtx
