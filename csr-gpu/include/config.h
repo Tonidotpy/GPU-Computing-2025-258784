@@ -15,7 +15,7 @@
  * operations might take some times
  */
 #ifndef LARGE_MATRIX_NZ_THRESHOLD
-#define LARGE_MATRIX_NZ_THRESHOLD (500000)
+#define LARGE_MATRIX_NZ_THRESHOLD (1000000)
 #endif // LARGE_MATRIX_NZ_THRESHOLD
 
 /*! Enable or disable logger colors */

@@ -389,7 +389,7 @@ dtype_t *dispatch(CsrMatrix_t *mat, dtype_t *x) {
     logger_debug(&hlogger, "data: host %p = device %p [%s]\n", mat->data, d_data, mat->data == d_data ? "EQUAL" : "NOT EQUAL");
 
     // TODO: Change number of blocks
-    const dsize_t blocks = 1;
+    const dsize_t blocks = mat->row_count < 512U ? 1 : MIN(MAX_BLOCK_COUNT, mat->row_count / 512U);
     const dsize_t threads_per_block = MIN(MAX_THREAD_COUNT, mat->row_count / blocks);
     for (dint_t i = -TSKIP; i < TITER; ++i) {
         cudaMemset(d_y, 0, mat->row_count * sizeof(*y));
@@ -481,6 +481,10 @@ int main(int argc, char *argv[]) {
         }
     }
 
+    ProfTimerHandler_t htimer;
+    prof_timer_init(&htimer);
+    prof_timer_start(&htimer);
+
     /*  1. Check arguments                                                   */
     if (argc != 2) {
         print_usage_and_exit(argc, argv);
@@ -500,6 +504,9 @@ int main(int argc, char *argv[]) {
 
     /*  6. Calculate matrix-vector product                                   */
     dtype_t *y = dispatch(&mat, x);
+
+    prof_timer_stop(&htimer);
+    prof_data.ttotal = prof_timer_elapsed(&htimer);
 
     /*  7. Print results                                                     */
     profiling_dump(&prof_data);
