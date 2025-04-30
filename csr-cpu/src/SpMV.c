@@ -407,6 +407,10 @@ int main(int argc, char *argv[]) {
         }
     }
 
+    ProfTimerHandler_t htimer;
+    prof_timer_init(&htimer);
+    prof_timer_start(&htimer);
+
     /*  1. Check arguments                                                   */
     if (argc != 2) {
         print_usage_and_exit(argc, argv);
@@ -426,6 +430,9 @@ int main(int argc, char *argv[]) {
 
     /*  6. Calculate matrix-vector product                                   */
     dtype_t *y = spmv(&mat, x);
+
+    prof_timer_start(&htimer);
+    prof_data.ttotal = prof_timer_elapsed(&htimer);
 
     /*  7. Print results                                                     */
     profiling_dump(&prof_data);

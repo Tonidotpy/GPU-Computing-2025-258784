@@ -8,6 +8,7 @@
  * \brief Structure used to save the profiling data
  */
 typedef struct _ProfilingData {
+    second_t ttotal;
     second_t tsetup;
     struct {
         second_t total;
