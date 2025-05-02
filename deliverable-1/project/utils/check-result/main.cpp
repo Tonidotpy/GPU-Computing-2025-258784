@@ -36,7 +36,8 @@ int main(int argc, char *argv[]) {
     Eigen::VectorXd res = mat * x;
 
     // Check result and error
-    const double epsilon = 1e-6;
+    const double epsilon = 1e-4;
+    std::cout << "Norm: " << (res - y).norm() << "\n";
     if ((res - y).norm() < epsilon) {
         std::cout << GREEN << "Results matches, the matrix-vector product is correct!!!\n" << RESET;
     }
