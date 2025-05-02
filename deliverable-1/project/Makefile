@@ -6,7 +6,7 @@ CLIB_BUILD_DIR := $(LIB_DIR)/cbuild
 CULIB_BUILD_DIR := $(LIB_DIR)/cubuild
 
 PROJECTS := $(shell find . -mindepth 1 -maxdepth 1 -type d)
-PROJECTS := $(filter-out ./.git ./data ./.cache ./$(LIB_DIR), $(PROJECTS))
+PROJECTS := $(filter-out ./.git ./data ./.cache ./utils ./$(LIB_DIR), $(PROJECTS))
 
 LIBS := $(shell find $(LIB_DIR) -mindepth 1 -maxdepth 1 -type d)
 LIBS := $(filter-out $(CLIB_BUILD_DIR) $(CULIB_BUILD_DIR), $(LIBS))
