@@ -460,7 +460,7 @@ void output_dump(char filename[128], dtype_t *y, dsize_t count) {
 
     // Write data
     for (dsize_t i = 0; i < count; ++i) {
-        if (fprintf(fp, "%.f\n", y[i]) < 0) {
+        if (fprintf(fp, "%f\n", y[i]) < 0) {
             logger_error(&hlogger, "failed to write output data to file\n", "");
             fclose(fp);
             return;
