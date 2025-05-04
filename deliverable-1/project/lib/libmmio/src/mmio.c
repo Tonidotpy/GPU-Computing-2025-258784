@@ -9,9 +9,62 @@
 #include <stdio.h>
 #include <string.h>
 #include <stdlib.h>
+#include <stdbool.h>
 #include <ctype.h>
 
 #include "mmio.h"
+
+#define MM_BUFFER_COUNT (1 << 15)
+
+int mm_pos, mm_len;
+char mm_buffer[MM_BUFFER_COUNT];
+
+char mm_read_char(FILE *f) {
+    if (mm_pos == mm_len) {
+        mm_pos = 0;
+        mm_len = (int)fread(mm_buffer, 1, MM_BUFFER_COUNT, f);
+        if (mm_len == 0)
+            return EOF;
+    }
+    return mm_buffer[mm_pos++];
+}
+
+int mm_read_int(FILE *f, int *x) {
+    char c;
+    int sign = 1;
+    while (!isdigit(c = mm_read_char(f))) {
+        if (c == '-')
+            sign = -1;
+    }
+    *x = c - '0';
+    while (isdigit(c = mm_read_char(f))) {
+        *x = *x * 10 + (c - '0');
+    }
+    *x *= sign;
+    return c == EOF ? -1 : 0;
+}
+
+int mm_read_double(FILE *f, double *x) {
+    char c;
+    double sign = 1;
+    while (!isdigit(c = mm_read_char(f))) {
+        if (c == '-')
+            sign = -1;
+    }
+    *x = c - '0';
+    while (isdigit(c = mm_read_char(f))) {
+        *x = *x * 10 + (c - '0');
+    }
+    if (c == '.') {
+        double dec = 0.1;
+        while (isdigit(c = mm_read_char(f))) {
+            *x = *x + (c - '0') * dec;
+            dec *= 0.1;
+        }
+    }
+    *x *= sign;
+    return c == EOF ? -1 : 0;
+}
 
 int mm_read_unsymmetric_sparse(const char *fname, int *M_, int *N_, int *nz_, double **val_, int **I_, int **J_) {
     FILE *f;
@@ -63,9 +116,9 @@ int mm_read_unsymmetric_sparse(const char *fname, int *M_, int *N_, int *nz_, do
     /*  (ANSI C X3.159-1989, Sec. 4.9.6.2, p. 136 lines 13-15)            */
 
     for (i = 0; i < nz; i++) {
-        fscanf(f, "%d %d %lg\n", &I[i], &J[i], &val[i]);
-        I[i]--; /* adjust from 1-based to 0-based */
-        J[i]--;
+        (void)mm_read_int(f, &I[i]);
+        (void)mm_read_int(f, &J[i]);
+        (void)mm_read_double(f, &val[i]);
     }
     fclose(f);
 
@@ -235,43 +288,45 @@ int mm_write_mtx_array_size(FILE *f, int M, int N) {
 int mm_read_mtx_crd_data(FILE *f, int M, int N, int nz, int I[], int J[], double val[], MM_typecode matcode) {
     (void)M;
     (void)N;
-    int i;
-    if (mm_is_complex(matcode)) {
-        for (i = 0; i < nz; i++)
-            if (fscanf(f, "%d %d %lg %lg", &I[i], &J[i], &val[2 * i], &val[2 * i + 1]) != 4)
-                return MM_PREMATURE_EOF;
-    } else if (mm_is_real(matcode)) {
-        for (i = 0; i < nz; i++) {
-            if (fscanf(f, "%d %d %lg\n", &I[i], &J[i], &val[i]) != 3)
+    bool is_complex = mm_is_complex(matcode);
+    bool is_real = mm_is_real(matcode);
+    bool is_integer = mm_is_integer(matcode);
+    bool is_pattern = mm_is_pattern(matcode);
+
+    if (!is_pattern && !is_integer && !is_real && !is_complex)
+        return MM_UNSUPPORTED_TYPE;
+    for (int i = 0; i < nz; i++) {
+        if (mm_read_int(f, &I[i]) < 0) return MM_PREMATURE_EOF;
+        if (mm_read_int(f, &J[i]) < 0) return MM_PREMATURE_EOF;
+
+        if (is_integer || is_real) {
+            if (mm_read_double(f, &val[i]) < 0)
                 return MM_PREMATURE_EOF;
         }
+        else if (is_complex) {
+            if (mm_read_double(f, &val[2 * i]) < 0) return MM_PREMATURE_EOF;
+            if (mm_read_double(f, &val[2 * i + 1]) < 0) return MM_PREMATURE_EOF;
+        }
     }
-
-    else if (mm_is_pattern(matcode)) {
-        for (i = 0; i < nz; i++)
-            if (fscanf(f, "%d %d", &I[i], &J[i]) != 2)
-                return MM_PREMATURE_EOF;
-    } else
-        return MM_UNSUPPORTED_TYPE;
-
     return 0;
 }
 
 int mm_read_mtx_crd_entry(FILE *f, int *I, int *J, double *real, double *imag, MM_typecode matcode) {
-    if (mm_is_complex(matcode)) {
-        if (fscanf(f, "%d %d %lg %lg", I, J, real, imag) != 4)
-            return MM_PREMATURE_EOF;
-    } else if (mm_is_real(matcode)) {
-        if (fscanf(f, "%d %d %lg\n", I, J, real) != 3)
-            return MM_PREMATURE_EOF;
-    }
+    bool is_complex = mm_is_complex(matcode);
+    bool is_real = mm_is_real(matcode);
+    bool is_integer = mm_is_integer(matcode);
+    bool is_pattern = mm_is_pattern(matcode);
 
-    else if (mm_is_pattern(matcode)) {
-        if (fscanf(f, "%d %d", I, J) != 2)
-            return MM_PREMATURE_EOF;
-    } else
+    if (!is_pattern && !is_integer && !is_real && !is_complex)
         return MM_UNSUPPORTED_TYPE;
+    if (mm_read_int(f, I) < 0) return MM_PREMATURE_EOF;
+    if (mm_read_int(f, J) < 0) return MM_PREMATURE_EOF;
 
+    if (is_integer || is_real || is_complex)
+        if (mm_read_double(f, real) < 0) return MM_PREMATURE_EOF;
+
+    if (is_complex)
+        if (mm_read_double(f, imag) < 0) return MM_PREMATURE_EOF;
     return 0;
 }
 
