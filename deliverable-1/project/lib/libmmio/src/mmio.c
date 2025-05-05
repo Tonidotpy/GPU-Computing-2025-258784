@@ -47,14 +47,17 @@ int mm_read_int(FILE *f, int *x) {
 int mm_read_double(FILE *f, double *x) {
     char c;
     double sign = 1;
+    // Parse sign
     while (!isdigit(c = mm_read_char(f))) {
         if (c == '-')
             sign = -1;
     }
+    // Parse digits
     *x = c - '0';
     while (isdigit(c = mm_read_char(f))) {
-        *x = *x * 10 + (c - '0');
+        *x = *x * 10.0 + (c - '0');
     }
+    // Parse decimals
     if (c == '.') {
         double dec = 0.1;
         while (isdigit(c = mm_read_char(f))) {
@@ -62,7 +65,22 @@ int mm_read_double(FILE *f, double *x) {
             dec *= 0.1;
         }
     }
-    *x *= sign;
+    // Parse exponent
+    double e = 1;
+    if (c == 'e') {
+        bool is_negative = false;
+        if ((c = mm_read_char(f)) == '-')
+            is_negative = true;
+        else
+            e = c - '0';
+
+        while (isdigit(c = mm_read_char(f))) {
+            e = e * 10.0 + (c - '0');
+        }
+        if (is_negative)
+            e = 1.0 / e;
+    }
+    *x *= sign * e;
     return c == EOF ? -1 : 0;
 }
 
