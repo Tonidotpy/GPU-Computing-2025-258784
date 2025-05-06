@@ -388,7 +388,6 @@ dtype_t *dispatch(CsrMatrix_t *mat, dtype_t *x) {
     logger_debug(&hlogger, "cols: host %p = device %p [%s]\n", mat->cols, d_cols, mat->cols == d_cols ? "EQUAL" : "NOT EQUAL");
     logger_debug(&hlogger, "data: host %p = device %p [%s]\n", mat->data, d_data, mat->data == d_data ? "EQUAL" : "NOT EQUAL");
 
-    // TODO: Change number of blocks
     const dsize_t blocks = mat->row_count < 512U ? 1 : MIN(MAX_BLOCK_COUNT, mat->row_count / 512U);
     const dsize_t threads_per_block = MIN(MAX_THREAD_COUNT, mat->row_count / blocks);
     for (dint_t i = -TSKIP; i < TITER; ++i) {
