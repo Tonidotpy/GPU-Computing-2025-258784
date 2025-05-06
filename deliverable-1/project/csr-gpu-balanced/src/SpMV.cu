@@ -305,23 +305,30 @@ __global__ void spmv_mul(CsrMatrix_t *mat, dtype_t *x) {
     /* Multiply values */
     dsize_t r = mat->rows[j];
     dsize_t c = i - r;
-    mat->data[] *= x[c];
+    mat->data[i] *= x[c];
     if (mat->symmetric && r != c)
         mat->data[i] *= x[r];
 }
 
-__inline__ __device__ float warp_reduce_sum(float val) {
-    #define FULL_MASK ((1LU << MAX_THREAD_PER_WARP_COUNT) - 1LU)
+__global__ void spmv_add(CsrMatrix_t *mat) {
+    dsize_t r = blockIdx.y;
+    dsize_t idx = blockIdx.x * blockDim.x + threadIdx.x;
+    dsize_t lane = threadIdx.x % MAX_THREAD_PER_WARP_COUNT;
+    dsize_t col_count = mat->rows[r + 1] - mat->rows[r];
+    if (idx >= col_count)
+        return;
+    dsize_t j = mat->rows[r] + idx;
+    dtype_t val = mat->data[j];
 
-    for (dsize_t off = MAX_THREAD_PER_WARP_COUNT / 2; offset > 0; offset >>= 1) {
-        val += __shfl_down_sync(FULL_MASK, val, offset);
+    for (dsize_t off = MAX_THREAD_PER_WARP_COUNT / 2; off > 0; off >>= 1) {
+        val += __shfl_down_sync(0xffffffff, val, off);
     }
-    return val;
+
+    if (lane == 0)
+        mat->data[j] = val;
 }
 
-__global__ spmv_add(CsrMatrix_t *mat, dtype_t *y) {
-}
-
+void output_dump(char filename[128], dtype_t *y, dsize_t count);
 dtype_t *dispatch(CsrMatrix_t *mat, dtype_t *x) {
     ProfTimerHandler_t htimer;
     prof_timer_init(&htimer);
@@ -339,13 +346,12 @@ dtype_t *dispatch(CsrMatrix_t *mat, dtype_t *x) {
 
     CsrMatrix_t *d_mat;
     dsize_t *d_rows, *d_cols;
-    dtype_t *d_data, *d_x, *d_y;
+    dtype_t *d_data, *d_x;
     cudaMallocManaged(&d_mat, sizeof(*d_mat));
     cudaMalloc(&d_rows, (mat->row_count + 1) * sizeof(*d_rows));
     cudaMalloc(&d_cols, mat->nz * sizeof(*d_cols));
     cudaMalloc(&d_data, mat->nz * sizeof(*d_data));
     cudaMalloc(&d_x, mat->col_count * sizeof(*d_x));
-    cudaMalloc(&d_y, mat->row_count * sizeof(*d_y));
 
     cudaMemcpy(d_mat, mat, sizeof(*d_mat), cudaMemcpyHostToDevice);
     cudaMemcpy(d_rows, mat->rows, (mat->row_count + 1) * sizeof(*d_rows), cudaMemcpyHostToDevice);
@@ -366,21 +372,40 @@ dtype_t *dispatch(CsrMatrix_t *mat, dtype_t *x) {
     logger_debug(&hlogger, "cols: host %p = device %p [%s]\n", mat->cols, d_cols, mat->cols == d_cols ? "EQUAL" : "NOT EQUAL");
     logger_debug(&hlogger, "data: host %p = device %p [%s]\n", mat->data, d_data, mat->data == d_data ? "EQUAL" : "NOT EQUAL");
 
-    const dsize_t blocks = mat->nz < MAX_THREAD_COUNT ? 1 : MIN(MAX_BLOCK_COUNT, mat->nz / MAX_THREAD_COUNT);
-    const dsize_t threads_per_block = MIN(MAX_THREAD_COUNT, mat->nz / blocks);
+    dsize_t max_col = 0;
+    for (dsize_t r = 0; r < mat->row_count; ++r) {
+        max_col = MAX(max_col, mat->rows[r + 1] - mat->rows[r]);
+    }
+    logger_debug(&hlogger, "maximum column length: %lu\n", max_col);
+
     for (dint_t i = -TSKIP; i < TITER; ++i) {
-        cudaMemset(d_y, 0, mat->row_count * sizeof(*y));
+        memset(y, 0, mat->row_count * sizeof(*y));
         cudaMemcpy(d_data, mat->data, mat->nz * sizeof(*d_data), cudaMemcpyHostToDevice);
 
+        // Calculate product
+        const dsize_t b1 = mat->nz < MAX_THREAD_COUNT ? 1 : MIN(MAX_BLOCK_COUNT, mat->nz / MAX_THREAD_COUNT);
+        dsize_t t1 = MIN(MAX_THREAD_COUNT, mat->nz / b1);
         cuda_timer_start(&htim_spmv);
-        spmv_mul<<<blocks, threads_per_block>>>(d_mat, d_x);
+        spmv_mul<<<b1, t1>>>(d_mat, d_x);
         cuda_timer_synchronize(&htim_spmv);
         cuda_timer_stop(&htim_spmv);
 
+        // Calculate sum
+        const dim3 b2(max_col / MAX_THREAD_PER_WARP_COUNT, mat->row_count, 0);
+        const dsize_t t2 = MAX_THREAD_PER_WARP_COUNT;
         cuda_timer_start(&htim_spmv);
-        spmv_add<<<blocks, threads_per_block>>>(d_mat, d_y);
+        spmv_add<<<b2, t2>>>(d_mat);
         cuda_timer_synchronize(&htim_spmv);
         cuda_timer_stop(&htim_spmv);
+
+        // Copy result to host
+        cudaMemcpy(mat->data, d_data, mat->nz * sizeof(*mat->data), cudaMemcpyDeviceToHost);
+        for (dsize_t r = 0; r < mat->row_count; ++r) {
+            dsize_t j = mat->rows[r];
+            for (dsize_t c = 0; c < b2.x; ++c) {
+                y[r] += mat->data[j + c];
+            }
+        }
 
         if (i >= 0) {
             prof_data.tspmv.t[i] = cuda_timer_elapsed(&htim_spmv);
@@ -391,8 +416,7 @@ dtype_t *dispatch(CsrMatrix_t *mat, dtype_t *x) {
         }
     }
 
-    // Copy result to host
-    cudaMemcpy(y, d_y, mat->row_count * sizeof(*y), cudaMemcpyDeviceToHost);
+    output_dump((char *)"mat", mat->data, mat->nz);
 
     prof_timer_stop(&htimer);
     prof_data.tspmv.total = prof_timer_elapsed(&htimer);
@@ -402,6 +426,7 @@ dtype_t *dispatch(CsrMatrix_t *mat, dtype_t *x) {
     cudaFree(d_rows);
     cudaFree(d_cols);
     cudaFree(d_data);
+    cudaFree(d_x);
     return y;
 }
 
