@@ -306,7 +306,7 @@ dtype_t *generate_input_vector(dsize_t count) {
     logger_info(&hlogger, "generating input vector...\n", "");
     dtype_t *x = (dtype_t *)arena_allocator_api_calloc(&harena, sizeof(*x), count);
     for (dsize_t i = 0; i < count; ++i) {
-        x[i] = (rand() % RAND_MAX) / 1e6;
+        x[i] = 1; // (rand() % RAND_MAX) / 1e6;
     }
 
     prof_timer_stop(&htimer);
@@ -314,32 +314,25 @@ dtype_t *generate_input_vector(dsize_t count) {
     return x;
 }
 
-__global__ void spmv(CsrMatrix_t *mat, dtype_t *x, dtype_t *y) {
-    const dsize_t batch_size = gridDim.x; 
-    const dsize_t stride = blockDim.x;
-    const dsize_t block = blockIdx.x;
-    const dsize_t idx = threadIdx.x;
+__global__ void spmv(CsrMatrix_t *mat, dtype_t *x, dtype_t *y, bool mirror) {
+    const dsize_t r = blockIdx.x * blockDim.x + threadIdx.x;
 
-    /*
-     * Iteration needed only if the total number of threads is not sufficient
-     * to cover all matrix rows
-     */
-    const dsize_t threads_count = (batch_size * stride);
-    const dsize_t grids = mat->row_count / threads_count;
-    for (dsize_t j = 0; j < grids; ++j) {
-        const dsize_t off = j * threads_count;
-        const dsize_t r = off + block * stride + idx;
+    // Ignore indices outside of the matrix bounds
+    if (r >= mat->row_count)
+        return;
 
-        /*
-         * Iterate over the columns
-         */
-        const dsize_t i0 = mat->rows[r];
-        for (dsize_t i = i0; i < mat->rows[r + 1]; ++i) {
-            const dsize_t c = mat->cols[i];
-            y[r] = y[r] + mat->data[i] * x[c];
-            if (mat->symmetric && r != c) {
-                y[c] = y[c] + mat->data[i] * x[r];
+    // Iterate over the rows
+    const dsize_t j = mat->rows[r];
+    for (dsize_t i = j; i < mat->rows[r + 1]; ++i) {
+        const dsize_t c = mat->cols[i];
+
+        if (mirror) {
+            if (r != c) {
+                y[c] += mat->data[i] * x[r];
             }
+        }
+        else {
+            y[r] += mat->data[i] * x[c];
         }
     }
 }
@@ -388,27 +381,35 @@ dtype_t *dispatch(CsrMatrix_t *mat, dtype_t *x) {
     logger_debug(&hlogger, "cols: host %p = device %p [%s]\n", mat->cols, d_cols, mat->cols == d_cols ? "EQUAL" : "NOT EQUAL");
     logger_debug(&hlogger, "data: host %p = device %p [%s]\n", mat->data, d_data, mat->data == d_data ? "EQUAL" : "NOT EQUAL");
 
-    const dsize_t blocks = mat->row_count < 512U ? 1 : MIN(MAX_BLOCK_COUNT, mat->row_count / 512U);
-    const dsize_t threads_per_block = MIN(MAX_THREAD_COUNT, mat->row_count / blocks);
+    const dsize_t blocks = mat->row_count < MAX_THREAD_COUNT ? 1 : ceil(mat->row_count / (double)MAX_THREAD_COUNT);
+    const dsize_t tcount = (dsize_t)1 << (dsize_t)ceil(log2(mat->row_count / (double)blocks));
+    const dsize_t threads_per_block = MIN(MAX_THREAD_COUNT, tcount);
+    logger_debug(&hlogger, "Blocks/Threads: <%lu, %lu>\n", blocks, threads_per_block);
     for (dint_t i = -TSKIP; i < TITER; ++i) {
         cudaMemset(d_y, 0, mat->row_count * sizeof(*y));
 
         cuda_timer_start(&htim_spmv);
-        spmv<<<blocks, threads_per_block>>>(d_mat, d_x, d_y);
+        spmv<<<blocks, threads_per_block>>>(d_mat, d_x, d_y, false);
+        cudaDeviceSynchronize();
+
+        // Calculate symmetric values
+        if (csr_is_symmetric(mat)) {
+            spmv<<<blocks, threads_per_block>>>(d_mat, d_x, d_y, true);
+        }
         cuda_timer_synchronize(&htim_spmv);
         cuda_timer_stop(&htim_spmv);
 
         if (i >= 0) {
             prof_data.tspmv.t[i] = cuda_timer_elapsed(&htim_spmv);
             logger_debug(&hlogger, "iteration %d: %2.5f s\n", i + 1, prof_data.tspmv.t[i]);
-        }
-        else {
+        } else {
             logger_debug(&hlogger, "warm-up %d: %2.5f s\n", TSKIP + i + 1, cuda_timer_elapsed(&htim_spmv));
         }
     }
 
     // Copy result to host
     cudaMemcpy(y, d_y, mat->row_count * sizeof(*y), cudaMemcpyDeviceToHost);
+    printf("DIOSTRAMERDA: %f\n", y[0]);
 
     prof_timer_stop(&htimer);
     prof_data.tspmv.total = prof_timer_elapsed(&htimer);
