@@ -9,4 +9,4 @@
 #SBATCH --output=test-%j.out
 #SBATCH --error=test-%j.err
 
-srun build/SpMV ../data/bcsstk32.mtx
+srun build/SpMV ../data/1138_bus.mtx

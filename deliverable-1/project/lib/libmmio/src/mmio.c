@@ -51,11 +51,18 @@ int mm_read_double(FILE *f, double *x) {
     while (!isdigit(c = mm_read_char(f))) {
         if (c == '-')
             sign = -1;
+        else if (c == '.') {
+            *x = 0;
+            break;
+        }
     }
-    // Parse digits
-    *x = c - '0';
-    while (isdigit(c = mm_read_char(f))) {
-        *x = *x * 10.0 + (c - '0');
+    // Some format omits the unit part if it is 0
+    if (isdigit(c)) {
+        // Parse digits
+        *x = c - '0';
+        while (isdigit(c = mm_read_char(f))) {
+            *x = *x * 10.0 + (c - '0');
+        }
     }
     // Parse decimals
     if (c == '.') {
@@ -314,16 +321,19 @@ int mm_read_mtx_crd_data(FILE *f, int M, int N, int nz, int I[], int J[], double
     if (!is_pattern && !is_integer && !is_real && !is_complex)
         return MM_UNSUPPORTED_TYPE;
     for (int i = 0; i < nz; i++) {
-        if (mm_read_int(f, &I[i]) < 0) return MM_PREMATURE_EOF;
-        if (mm_read_int(f, &J[i]) < 0) return MM_PREMATURE_EOF;
+        if (mm_read_int(f, &I[i]) < 0)
+            return MM_PREMATURE_EOF;
+        if (mm_read_int(f, &J[i]) < 0)
+            return MM_PREMATURE_EOF;
 
         if (is_integer || is_real) {
             if (mm_read_double(f, &val[i]) < 0)
                 return MM_PREMATURE_EOF;
-        }
-        else if (is_complex) {
-            if (mm_read_double(f, &val[2 * i]) < 0) return MM_PREMATURE_EOF;
-            if (mm_read_double(f, &val[2 * i + 1]) < 0) return MM_PREMATURE_EOF;
+        } else if (is_complex) {
+            if (mm_read_double(f, &val[2 * i]) < 0)
+                return MM_PREMATURE_EOF;
+            if (mm_read_double(f, &val[2 * i + 1]) < 0)
+                return MM_PREMATURE_EOF;
         }
     }
     return 0;
@@ -337,14 +347,18 @@ int mm_read_mtx_crd_entry(FILE *f, int *I, int *J, double *real, double *imag, M
 
     if (!is_pattern && !is_integer && !is_real && !is_complex)
         return MM_UNSUPPORTED_TYPE;
-    if (mm_read_int(f, I) < 0) return MM_PREMATURE_EOF;
-    if (mm_read_int(f, J) < 0) return MM_PREMATURE_EOF;
+    if (mm_read_int(f, I) < 0)
+        return MM_PREMATURE_EOF;
+    if (mm_read_int(f, J) < 0)
+        return MM_PREMATURE_EOF;
 
     if (is_integer || is_real || is_complex)
-        if (mm_read_double(f, real) < 0) return MM_PREMATURE_EOF;
+        if (mm_read_double(f, real) < 0)
+            return MM_PREMATURE_EOF;
 
     if (is_complex)
-        if (mm_read_double(f, imag) < 0) return MM_PREMATURE_EOF;
+        if (mm_read_double(f, imag) < 0)
+            return MM_PREMATURE_EOF;
     return 0;
 }
 
