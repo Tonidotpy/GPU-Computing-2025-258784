@@ -166,17 +166,17 @@ void parse_matrix_from_file(char *path) {
     prof_timer_start(&htim_parse);
 
     logger_info(&hlogger, "allocating memory for the matrix...\n", "");
-    mat.rows = (dsize_t *)arena_allocator_api_calloc(&harena, sizeof(*mat.rows), mat.nz);
-    mat.cols = (dsize_t *)arena_allocator_api_calloc(&harena, sizeof(*mat.cols), mat.nz);
-    mat.data = (dtype_t *)arena_allocator_api_calloc(&harena, sizeof(*mat.data), mat.nz);
+    mat.rows = (dsize_t *)arena_allocator_api_calloc(&harena, sizeof(*mat.rows), mat.nz * 2);
+    mat.cols = (dsize_t *)arena_allocator_api_calloc(&harena, sizeof(*mat.cols), mat.nz * 2);
+    mat.data = (dtype_t *)arena_allocator_api_calloc(&harena, sizeof(*mat.data), mat.nz * 2);
     if (mat.rows == NULL || mat.cols == NULL || mat.data == NULL) {
         logger_error(&hlogger, "could not allocate enough memory for the matrix data\n", "");
         fclose(fp);
         panic(EXIT_FAILURE, strerror(errno));
     }
-    memset(mat.rows, 0, mat.nz * sizeof(*mat.rows));
-    memset(mat.cols, 0, mat.nz * sizeof(*mat.cols));
-    memset(mat.data, 0, mat.nz * sizeof(*mat.data));
+    memset(mat.rows, 0, mat.nz * 2 * sizeof(*mat.rows));
+    memset(mat.cols, 0, mat.nz * 2 * sizeof(*mat.cols));
+    memset(mat.data, 0, mat.nz * 2 * sizeof(*mat.data));
 
     prof_timer_stop(&htim_parse);
     prof_data.tparse.allocation = prof_timer_elapsed(&htim_parse);
@@ -213,8 +213,16 @@ void parse_matrix_from_file(char *path) {
          * Symmetric matrices has to be taken in account
          */
         prof_data.flop += 2U;
-        if (csr_is_symmetric(&mat))
+        if (csr_is_symmetric(&mat) && r != c) {
             prof_data.flop += 2U;
+            ++i;
+            ++mat.nz;
+
+            /*! Rows and columns indices starts from 1 */
+            mat.rows[i] = c - 1;
+            mat.cols[i] = r - 1;
+            mat.data[i] = real;
+        }
     }
 
     fclose(fp);
@@ -279,32 +287,17 @@ dtype_t *generate_input_vector(dsize_t count) {
 }
 
 __global__ void spmv(CsrMatrix_t *mat, dtype_t *x, dtype_t *y) {
-    const dsize_t batch_size = gridDim.x; 
-    const dsize_t stride = blockDim.x;
-    const dsize_t block = blockIdx.x;
-    const dsize_t idx = threadIdx.x;
+    const dsize_t r = blockIdx.x * blockDim.x + threadIdx.x;
 
-    /*
-     * Iteration needed only if the total number of threads is not sufficient
-     * to cover all matrix rows
-     */
-    const dsize_t threads_count = (batch_size * stride);
-    const dsize_t grids = mat->row_count / threads_count;
-    for (dsize_t j = 0; j < grids; ++j) {
-        const dsize_t off = j * threads_count;
-        const dsize_t r = off + block * stride + idx;
+    // Ignore indices outside of the matrix bounds
+    if (r >= mat->row_count)
+        return;
 
-        /*
-         * Iterate over the columns
-         */
-        const dsize_t i0 = mat->rows[r];
-        for (dsize_t i = i0; i < mat->rows[r + 1]; ++i) {
-            const dsize_t c = mat->cols[i];
-            y[r] = y[r] + mat->data[i] * x[c];
-            if (mat->symmetric && r != c) {
-                y[c] = y[c] + mat->data[i] * x[r];
-            }
-        }
+    // Iterate over the rows
+    const dsize_t j = mat->rows[r];
+    for (dsize_t i = j; i < mat->rows[r + 1]; ++i) {
+        const dsize_t c = mat->cols[i];
+        y[r] += mat->data[i] * x[c];
     }
 }
 
@@ -352,8 +345,10 @@ dtype_t *dispatch(CsrMatrix_t *mat, dtype_t *x) {
     logger_debug(&hlogger, "cols: host %p = device %p [%s]\n", mat->cols, d_cols, mat->cols == d_cols ? "EQUAL" : "NOT EQUAL");
     logger_debug(&hlogger, "data: host %p = device %p [%s]\n", mat->data, d_data, mat->data == d_data ? "EQUAL" : "NOT EQUAL");
 
-    const dsize_t blocks = mat->row_count < 512U ? 1 : MIN(MAX_BLOCK_COUNT, mat->row_count / 512U);
-    const dsize_t threads_per_block = MIN(MAX_THREAD_COUNT, mat->row_count / blocks);
+    const dsize_t blocks = mat->row_count < MAX_THREAD_COUNT ? 1 : ceil(mat->row_count / (double)MAX_THREAD_COUNT);
+    const dsize_t tcount = (dsize_t)1 << (dsize_t)ceil(log2(mat->row_count / (double)blocks));
+    const dsize_t threads_per_block = MIN(MAX_THREAD_COUNT, tcount);
+    logger_debug(&hlogger, "Blocks/Threads: <%lu, %lu>\n", blocks, threads_per_block);
     for (dint_t i = -TSKIP; i < TITER; ++i) {
         cudaMemset(d_y, 0, mat->row_count * sizeof(*y));
 

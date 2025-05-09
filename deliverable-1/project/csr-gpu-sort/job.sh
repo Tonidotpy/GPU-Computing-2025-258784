@@ -10,4 +10,4 @@
 #SBATCH --error=test-%j.err
 
 module load CUDA/12.1
-srun build/SpMV ../data/cage15.mtx
+srun build/SpMV ../data/1138_bus.mtx

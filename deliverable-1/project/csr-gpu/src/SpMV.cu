@@ -334,7 +334,7 @@ dtype_t *generate_input_vector(dsize_t count) {
     logger_info(&hlogger, "generating input vector...\n", "");
     dtype_t *x = (dtype_t *)arena_allocator_api_calloc(&harena, sizeof(*x), count);
     for (dsize_t i = 0; i < count; ++i) {
-        x[i] = 1; // (rand() % RAND_MAX) / 1e6;
+        x[i] = (rand() % RAND_MAX) / 1e6;
     }
 
     prof_timer_stop(&htimer);
@@ -410,7 +410,6 @@ dtype_t *dispatch(CsrMatrix_t *mat, dtype_t *x) {
 
         cuda_timer_start(&htim_spmv);
         spmv<<<blocks, threads_per_block>>>(d_mat, d_x, d_y);
-        cudaDeviceSynchronize();
         cuda_timer_synchronize(&htim_spmv);
         cuda_timer_stop(&htim_spmv);
 
