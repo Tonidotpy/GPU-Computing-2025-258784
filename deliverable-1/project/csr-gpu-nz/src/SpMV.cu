@@ -299,24 +299,6 @@ __global__ void spmv(CsrMatrix_t *mat, dtype_t *x) {
     mat->data[idx] *= x[c];
 }
 
-// __global__ void spmv_add(CsrMatrix_t *mat) {
-//     dsize_t r = blockIdx.y;
-//     dsize_t idx = blockIdx.x * blockDim.x + threadIdx.x;
-//     dsize_t lane = threadIdx.x % MAX_THREAD_PER_WARP_COUNT;
-//     dsize_t col_count = mat->rows[r + 1] - mat->rows[r];
-//     if (idx >= col_count)
-//         return;
-//     dsize_t j = mat->rows[r] + idx;
-//     dtype_t val = mat->data[j];
-//
-//     for (dsize_t off = MAX_THREAD_PER_WARP_COUNT / 2; off > 0; off >>= 1) {
-//         val += __shfl_down_sync(0xffffffff, val, off);
-//     }
-//
-//     if (lane == 0)
-//         mat->data[j] = val;
-// }
-
 dtype_t *dispatch(CsrMatrix_t *mat, dtype_t *x) {
     ProfTimerHandler_t htimer;
     prof_timer_init(&htimer);
