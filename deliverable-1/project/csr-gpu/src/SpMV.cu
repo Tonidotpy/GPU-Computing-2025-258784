@@ -24,6 +24,8 @@ ArenaAllocatorHandler_t harena;
 CsrMatrix_t mat;
 ProfilingData prof_data;
 
+void output_dump(char filename[128], dtype_t *y, dsize_t count);
+
 /*!
  * \brief Exit point of the program
  *
@@ -200,7 +202,7 @@ dsize_t *parse_matrix_from_file(char *path) {
         prof_timer_stop(&htim_parse);
         prof_data.tparse.io += prof_timer_elapsed(&htim_parse);
 
-        if (i % MAX(1, (mat.nz / 10)) == 0) {
+        if (i % MAX(1, (mat.nz * 2 / 10)) == 0) {
             logger_debug(&hlogger, "progress %.0f%%\n", (float)i / (mat.nz * 2) * 100.f);
         }
 
@@ -240,8 +242,8 @@ dsize_t *parse_matrix_from_file(char *path) {
             ++mat.nz;
 
             /*! Rows and columns indices starts from 1 */
-            mat.rows[i] = r - 1;
-            mat.cols[i] = c - 1;
+            mat.rows[i] = c - 1;
+            mat.cols[i] = r - 1;
             mat.data[i] = real;
 
             prof_timer_start(&htim_parse);
@@ -352,9 +354,6 @@ __global__ void spmv(CsrMatrix_t *mat, dtype_t *x, dtype_t *y) {
     for (dsize_t i = j; i < mat->rows[r + 1]; ++i) {
         const dsize_t c = mat->cols[i];
         y[r] += mat->data[i] * x[c];
-        if (symm)
-            y[c] += mat->data[i] * x[r];
-
     }
 }
 
@@ -410,7 +409,7 @@ dtype_t *dispatch(CsrMatrix_t *mat, dtype_t *x) {
         cudaMemset(d_y, 0, mat->row_count * sizeof(*y));
 
         cuda_timer_start(&htim_spmv);
-        spmv<<<blocks, threads_per_block>>>(d_mat, d_x, d_y, false);
+        spmv<<<blocks, threads_per_block>>>(d_mat, d_x, d_y);
         cudaDeviceSynchronize();
         cuda_timer_synchronize(&htim_spmv);
         cuda_timer_stop(&htim_spmv);
@@ -425,7 +424,6 @@ dtype_t *dispatch(CsrMatrix_t *mat, dtype_t *x) {
 
     // Copy result to host
     cudaMemcpy(y, d_y, mat->row_count * sizeof(*y), cudaMemcpyDeviceToHost);
-    printf("DIOSTRAMERDA: %f\n", y[0]);
 
     prof_timer_stop(&htimer);
     prof_data.tspmv.total = prof_timer_elapsed(&htimer);

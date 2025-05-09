@@ -21,4 +21,4 @@ $(BUILD_DIR):
 	mkdir -p $@
 
 clean:
-	rm -f main
+	rm -f $(BUILD_DIR)/main
