@@ -56,6 +56,7 @@ void _logger_vfprintf(const char *file, int line, const LoggerHandler_t *hlogger
         if (hlogger->colors_enable)
             fprintf(fp, "\033[0m");
         vfprintf(fp, fmt, args);
+        fflush(fp);
     }
 }
 
