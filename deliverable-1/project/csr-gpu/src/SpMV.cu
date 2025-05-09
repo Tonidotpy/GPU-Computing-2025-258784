@@ -165,23 +165,23 @@ dsize_t *parse_matrix_from_file(char *path) {
     prof_timer_start(&htim_parse);
 
     logger_info(&hlogger, "allocating memory for the matrix...\n", "");
-    mat.rows = (dsize_t *)arena_allocator_api_calloc(&harena, sizeof(*mat.rows), mat.nz);
-    mat.cols = (dsize_t *)arena_allocator_api_calloc(&harena, sizeof(*mat.cols), mat.nz);
-    mat.data = (dtype_t *)arena_allocator_api_calloc(&harena, sizeof(*mat.data), mat.nz);
+    mat.rows = (dsize_t *)arena_allocator_api_calloc(&harena, sizeof(*mat.rows), mat.nz * 2);
+    mat.cols = (dsize_t *)arena_allocator_api_calloc(&harena, sizeof(*mat.cols), mat.nz * 2);
+    mat.data = (dtype_t *)arena_allocator_api_calloc(&harena, sizeof(*mat.data), mat.nz * 2);
     if (mat.rows == NULL || mat.cols == NULL || mat.data == NULL) {
         logger_error(&hlogger, "could not allocate enough memory for the matrix data\n", "");
         fclose(fp);
         panic(EXIT_FAILURE, strerror(errno));
     }
-    memset(mat.rows, 0, mat.nz * sizeof(*mat.rows));
-    memset(mat.cols, 0, mat.nz * sizeof(*mat.cols));
-    memset(mat.data, 0, mat.nz * sizeof(*mat.data));
+    memset(mat.rows, 0, mat.nz * 2 * sizeof(*mat.rows));
+    memset(mat.cols, 0, mat.nz * 2 * sizeof(*mat.cols));
+    memset(mat.data, 0, mat.nz * 2 * sizeof(*mat.data));
 
     prof_timer_stop(&htim_parse);
     prof_data.tparse.allocation = prof_timer_elapsed(&htim_parse);
 
     // Allocate memory needed to later sort the rows
-    dsize_t *sorted_row_idx = (dsize_t *)arena_allocator_api_calloc(&harena, sizeof(*sorted_row_idx), mat.nz);
+    dsize_t *sorted_row_idx = (dsize_t *)arena_allocator_api_calloc(&harena, sizeof(*sorted_row_idx), mat.nz * 2);
 
     // Parse matrix data from file line by line
     logger_info(&hlogger, "parsing Matrix Market file data...\n", "");
@@ -201,7 +201,7 @@ dsize_t *parse_matrix_from_file(char *path) {
         prof_data.tparse.io += prof_timer_elapsed(&htim_parse);
 
         if (i % MAX(1, (mat.nz / 10)) == 0) {
-            logger_debug(&hlogger, "progress %.0f%%\n", (float)i / mat.nz * 100.f);
+            logger_debug(&hlogger, "progress %.0f%%\n", (float)i / (mat.nz * 2) * 100.f);
         }
 
         /*! Rows and columns indices starts from 1 */
@@ -215,8 +215,6 @@ dsize_t *parse_matrix_from_file(char *path) {
          * Symmetric matrices has to be taken in account
          */
         prof_data.flop += 2U;
-        if (csr_is_symmetric(&mat))
-            prof_data.flop += 2U;
 
         prof_timer_start(&htim_parse);
 
@@ -234,6 +232,34 @@ dsize_t *parse_matrix_from_file(char *path) {
 
         prof_timer_stop(&htim_parse);
         prof_data.tparse.sort += prof_timer_elapsed(&htim_parse);
+
+        // Add symmetric values
+        if (csr_is_symmetric(&mat) && r != c) {
+            prof_data.flop += 2U;
+            ++i;
+            ++mat.nz;
+
+            /*! Rows and columns indices starts from 1 */
+            mat.rows[i] = r - 1;
+            mat.cols[i] = c - 1;
+            mat.data[i] = real;
+
+            prof_timer_start(&htim_parse);
+
+            // Sort indices based on rows and columns values
+            sorted_row_idx[i] = i;
+            for (dint_t j = i - 1; j >= 0; --j) {
+                dsize_t idx = sorted_row_idx[j];
+                dsize_t row = mat.rows[idx];
+                dsize_t col = mat.cols[idx];
+                if (mat.rows[i] < row || (mat.rows[i] == row && mat.cols[i] < col))
+                    SWAP(dsize_t, sorted_row_idx[j], sorted_row_idx[j + 1]);
+                else
+                    break;
+            }
+            prof_timer_stop(&htim_parse);
+            prof_data.tparse.sort += prof_timer_elapsed(&htim_parse);
+        }
     }
 
     fclose(fp);
@@ -314,7 +340,7 @@ dtype_t *generate_input_vector(dsize_t count) {
     return x;
 }
 
-__global__ void spmv(CsrMatrix_t *mat, dtype_t *x, dtype_t *y, bool mirror) {
+__global__ void spmv(CsrMatrix_t *mat, dtype_t *x, dtype_t *y) {
     const dsize_t r = blockIdx.x * blockDim.x + threadIdx.x;
 
     // Ignore indices outside of the matrix bounds
@@ -325,15 +351,10 @@ __global__ void spmv(CsrMatrix_t *mat, dtype_t *x, dtype_t *y, bool mirror) {
     const dsize_t j = mat->rows[r];
     for (dsize_t i = j; i < mat->rows[r + 1]; ++i) {
         const dsize_t c = mat->cols[i];
+        y[r] += mat->data[i] * x[c];
+        if (symm)
+            y[c] += mat->data[i] * x[r];
 
-        if (mirror) {
-            if (r != c) {
-                y[c] += mat->data[i] * x[r];
-            }
-        }
-        else {
-            y[r] += mat->data[i] * x[c];
-        }
     }
 }
 
@@ -391,11 +412,6 @@ dtype_t *dispatch(CsrMatrix_t *mat, dtype_t *x) {
         cuda_timer_start(&htim_spmv);
         spmv<<<blocks, threads_per_block>>>(d_mat, d_x, d_y, false);
         cudaDeviceSynchronize();
-
-        // Calculate symmetric values
-        if (csr_is_symmetric(mat)) {
-            spmv<<<blocks, threads_per_block>>>(d_mat, d_x, d_y, true);
-        }
         cuda_timer_synchronize(&htim_spmv);
         cuda_timer_stop(&htim_spmv);
 
