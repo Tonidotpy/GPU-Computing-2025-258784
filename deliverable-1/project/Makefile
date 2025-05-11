@@ -5,8 +5,7 @@ LIB_DIR := lib
 CLIB_BUILD_DIR := $(LIB_DIR)/cbuild
 CULIB_BUILD_DIR := $(LIB_DIR)/cubuild
 
-PROJECTS := $(shell find . -mindepth 1 -maxdepth 1 -type d)
-PROJECTS := $(filter-out ./.git ./data ./.cache ./utils ./$(LIB_DIR), $(PROJECTS))
+PROJECTS := $(shell find . -mindepth 1 -maxdepth 1 -type d -name 'csr-*')
 
 LIBS := $(shell find $(LIB_DIR) -mindepth 1 -maxdepth 1 -type d)
 LIBS := $(filter-out $(CLIB_BUILD_DIR) $(CULIB_BUILD_DIR), $(LIBS))
