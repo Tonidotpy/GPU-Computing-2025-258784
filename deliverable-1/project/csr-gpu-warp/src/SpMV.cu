@@ -20,7 +20,6 @@ extern "C" {
 #include "csr-matrix.h"
 #include "cuda-timer.h"
 
-
 LoggerHandler_t hlogger;
 ArenaAllocatorHandler_t harena;
 CsrMatrix_t mat;
@@ -300,14 +299,31 @@ __global__ void spmv_mul(CsrMatrix_t *mat, dtype_t *x) {
 }
 
 __global__ void spmv_add(CsrMatrix_t *mat) {
-    dsize_t r = blockIdx.y;
-    dsize_t idx = blockIdx.x * blockDim.x + threadIdx.x;
-    dsize_t lane = threadIdx.x % MAX_THREAD_PER_WARP_COUNT;
-    dsize_t col_count = mat->rows[r + 1] - mat->rows[r];
-    if (idx >= col_count)
-        return;
-    dsize_t j = mat->rows[r] + idx;
-    dtype_t val = mat->data[j];
+    dsize_t block = blockIdx.x;
+
+    /* Binary search row of the block */
+    dsize_t r = 0;
+    dsize_t count = mat->row_count + 1;
+    while (count > 1) {
+        count /= 2;
+        dsize_t m = r + count;
+        if ((dsize_t)ceil(mat->rows[m] / MAX_THREAD_COUNT) < block) {
+            r = m;
+        }
+    }
+    if (r < mat->row_count &&
+        ceil(mat->rows[r] / MAX_THREAD_COUNT) < block &&
+        block == ceil(mat->rows[r + 1] / MAX_THREAD_COUNT)
+    {
+        ++r;
+    }
+
+    /* Find first column of the block */
+    dsize_t c = block - (dsize_t)ceil(mat->rows[r] / MAX_THREAD_COUNT);
+
+
+
+    // TODO: 
 
     for (dsize_t off = MAX_THREAD_PER_WARP_COUNT / 2; off > 0; off >>= 1) {
         val += __shfl_down_sync(0xffffffff, val, off);
@@ -360,25 +376,27 @@ dtype_t *dispatch(CsrMatrix_t *mat, dtype_t *x) {
     logger_debug(&hlogger, "cols: host %p = device %p [%s]\n", mat->cols, d_cols, mat->cols == d_cols ? "EQUAL" : "NOT EQUAL");
     logger_debug(&hlogger, "data: host %p = device %p [%s]\n", mat->data, d_data, mat->data == d_data ? "EQUAL" : "NOT EQUAL");
 
-    dtype_t * data = (dtype_t *)arena_allocator_api_calloc(&harena, sizeof(*data), mat->nz);
+    dtype_t *data = (dtype_t *)arena_allocator_api_calloc(&harena, sizeof(*data), mat->nz);
     memcpy(data, mat->data, mat->nz * sizeof(*data));
 
     const dsize_t mul_blocks = mat->nz < MAX_THREAD_COUNT ? 1 : ceil(mat->nz / (double)MAX_THREAD_COUNT);
-    const dsize_t mul_tcount = (dsize_t)1 << (dsize_t)ceil(log2(mat->nz / (double)blocks));
-    const dsize_t mul_threads_per_block = MIN(MAX_THREAD_COUNT, tcount);
-    logger_debug(&hlogger, "Multiplication Blocks/Threads: <%lu, %lu>\n", blocks, threads_per_block);
+    const dsize_t mul_tcount = (dsize_t)1 << (dsize_t)ceil(log2(mat->nz / (double)mul_blocks));
+    const dsize_t mul_threads_per_block = MIN(MAX_THREAD_COUNT, mul_tcount);
+    logger_debug(&hlogger, "Multiplication Blocks/Threads: <%lu, %lu>\n", mul_blocks, mul_threads_per_block);
 
-    const dsize_t add_blocks = mat->row_count < MAX_THREAD_COUNT ? 1 : ceil(mat->nz / (double)MAX_THREAD_COUNT);
-    const dsize_t add_tcount = (dsize_t)1 << (dsize_t)ceil(log2(mat->nz / (double)blocks));
-    const dsize_t add_threads_per_block = MIN(MAX_THREAD_COUNT, tcount);
-    logger_debug(&hlogger, "Addition Blocks/Threads: <%lu, %lu>\n", blocks, threads_per_block);
+    dsize_t add_blocks = 0;
+    for (dsize_t i = 0; i < mat->row_count; ++i) {
+        add_blocks += (dsize_t)ceil((mat->rows[i + 1] - mat->rows[i]) / (double)MAX_THREAD_COUNT);
+    }
+    const dsize_t add_threads_per_block = MAX_THREAD_COUNT;
+    logger_debug(&hlogger, "Addition Blocks/Threads: <%lu, %lu>\n", mul_blocks, mul_threads_per_block);
     for (dint_t i = -TSKIP; i < TITER; ++i) {
         memset(y, 0, mat->row_count * sizeof(*y));
         cudaMemcpy(d_data, data, mat->nz * sizeof(*d_data), cudaMemcpyHostToDevice);
 
         // Calculate product
         cuda_timer_start(&htim_spmv);
-        spmv_mul<<<blocks, threads_per_block>>>(d_mat, d_x);
+        spmv_mul<<<mul_blocks, mul_threads_per_block>>>(d_mat, d_x);
         cuda_timer_synchronize(&htim_spmv);
 
         // Copy result to host
@@ -392,8 +410,7 @@ dtype_t *dispatch(CsrMatrix_t *mat, dtype_t *x) {
         if (i >= 0) {
             prof_data.tspmv.t[i] = cuda_timer_elapsed(&htim_spmv);
             logger_debug(&hlogger, "iteration %d: %2.5f s\n", i + 1, prof_data.tspmv.t[i]);
-        }
-        else {
+        } else {
             logger_debug(&hlogger, "warm-up %d: %2.5f s\n", TSKIP + i + 1, cuda_timer_elapsed(&htim_spmv));
         }
     }
