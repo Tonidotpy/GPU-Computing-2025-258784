@@ -298,39 +298,46 @@ __global__ void spmv_mul(CsrMatrix_t *mat, dtype_t *x) {
     mat->data[idx] *= x[c];
 }
 
-__global__ void spmv_add(CsrMatrix_t *mat) {
-    dsize_t block = blockIdx.x;
-
-    /* Binary search row of the block */
-    dsize_t r = 0;
-    dsize_t count = mat->row_count + 1;
-    while (count > 1) {
-        count /= 2;
-        dsize_t m = r + count;
-        if ((dsize_t)ceil(mat->rows[m] / MAX_THREAD_COUNT) < block) {
-            r = m;
+__device__ dsize_t row_binary_search(CsrMatrix_t *mat, dsize_t *rows_idx) {
+    dint_t r = 0;
+    dint_t end = mat->row_count + 1;
+    while (r < end) {
+        dsize_t m = r + (end - r) / 2;
+        if (rows_idx[m] < blockIdx.x) {
+            r = m + 1;
+        } else {
+            end = m;
         }
     }
-    if (r < mat->row_count &&
-        ceil(mat->rows[r] / MAX_THREAD_COUNT) < block &&
-        block == ceil(mat->rows[r + 1] / MAX_THREAD_COUNT)
-    {
-        ++r;
-    }
+    if (r != 0 && blockIdx.x < rows_idx[r])
+        --r;
+    return r;
+}
 
-    /* Find first column of the block */
-    dsize_t c = block - (dsize_t)ceil(mat->rows[r] / MAX_THREAD_COUNT);
+__global__ void spmv_add(CsrMatrix_t *mat, dsize_t *rows_idx) {
+    /* Binary search row of the block */
+    dsize_t r = row_binary_search(mat, rows_idx);
 
+    /* Find starting index of the block for the given row (divided by MAX_THREAD_COUNT) */
+    dsize_t j = blockIdx.x - rows_idx[r];
+    dsize_t k = j * MAX_THREAD_COUNT + threadIdx.x;
+    dsize_t nz_per_row = mat->rows[r + 1] - mat->rows[r];
 
+    /* Warp reduction sum */
+    if (k >= nz_per_row)
+        return;
 
-    // TODO: 
-
+    /* Create mask to only use threads inside the bounds of the matrix */
+    dint_t mask = __ballot_sync(FULL_MASK, k < nz_per_row);
+    dtype_t val = mat->data[mat->rows[r] + k];
     for (dsize_t off = MAX_THREAD_PER_WARP_COUNT / 2; off > 0; off >>= 1) {
-        val += __shfl_down_sync(0xffffffff, val, off);
+        val += __shfl_down_sync(mask, val, off);
     }
 
-    if (lane == 0)
-        mat->data[j] = val;
+    dsize_t lane = threadIdx.x % 32;
+    if (lane == 0) {
+        mat->data[mat->rows[r] + k] = val;
+    }
 }
 
 dtype_t *dispatch(CsrMatrix_t *mat, dtype_t *x) {
@@ -376,8 +383,19 @@ dtype_t *dispatch(CsrMatrix_t *mat, dtype_t *x) {
     logger_debug(&hlogger, "cols: host %p = device %p [%s]\n", mat->cols, d_cols, mat->cols == d_cols ? "EQUAL" : "NOT EQUAL");
     logger_debug(&hlogger, "data: host %p = device %p [%s]\n", mat->data, d_data, mat->data == d_data ? "EQUAL" : "NOT EQUAL");
 
+    /* Auxiliary arrays needed for the calculation */
     dtype_t *data = (dtype_t *)arena_allocator_api_calloc(&harena, sizeof(*data), mat->nz);
     memcpy(data, mat->data, mat->nz * sizeof(*data));
+
+    dsize_t *rows_idx = (dsize_t *)arena_allocator_api_calloc(&harena, sizeof(*rows_idx), mat->row_count + 1);
+    dsize_t *d_rows_idx;
+    cudaMalloc(&d_rows_idx, (mat->row_count + 1) * sizeof(*d_rows_idx));
+
+    rows_idx[0] = 0;
+    for (dsize_t i = 1; i < mat->row_count + 1; ++i) {
+        rows_idx[i] = rows_idx[i - 1] + (mat->rows[i] - mat->rows[i - 1]) / MAX_THREAD_COUNT + 1;
+    }
+    cudaMemcpy(d_rows_idx, rows_idx, (mat->row_count + 1) * sizeof(*d_rows_idx), cudaMemcpyHostToDevice);
 
     const dsize_t mul_blocks = mat->nz < MAX_THREAD_COUNT ? 1 : ceil(mat->nz / (double)MAX_THREAD_COUNT);
     const dsize_t mul_tcount = (dsize_t)1 << (dsize_t)ceil(log2(mat->nz / (double)mul_blocks));
@@ -389,7 +407,7 @@ dtype_t *dispatch(CsrMatrix_t *mat, dtype_t *x) {
         add_blocks += (dsize_t)ceil((mat->rows[i + 1] - mat->rows[i]) / (double)MAX_THREAD_COUNT);
     }
     const dsize_t add_threads_per_block = MAX_THREAD_COUNT;
-    logger_debug(&hlogger, "Addition Blocks/Threads: <%lu, %lu>\n", mul_blocks, mul_threads_per_block);
+    logger_debug(&hlogger, "Addition Blocks/Threads: <%lu, %lu>\n", add_blocks, add_threads_per_block);
     for (dint_t i = -TSKIP; i < TITER; ++i) {
         memset(y, 0, mat->row_count * sizeof(*y));
         cudaMemcpy(d_data, data, mat->nz * sizeof(*d_data), cudaMemcpyHostToDevice);
@@ -399,12 +417,20 @@ dtype_t *dispatch(CsrMatrix_t *mat, dtype_t *x) {
         spmv_mul<<<mul_blocks, mul_threads_per_block>>>(d_mat, d_x);
         cuda_timer_synchronize(&htim_spmv);
 
+        // Calculate sum
+        spmv_add<<<add_blocks, add_threads_per_block>>>(d_mat, d_rows_idx);
+        cuda_timer_synchronize(&htim_spmv);
+
         // Copy result to host
         cudaMemcpy(mat->data, d_data, mat->nz * sizeof(*mat->data), cudaMemcpyDeviceToHost);
 
-        // Calculate sum
-        spmv_add<<<add_blocks, add_threads_per_block>>>(d_mat, d_x);
-        cuda_timer_synchronize(&htim_spmv);
+        // Sum all partial sums
+        for (dsize_t r = 0; r < mat->row_count; ++r) {
+            for (dsize_t j = mat->rows[r]; j < mat->rows[r + 1]; j += MAX_THREAD_PER_WARP_COUNT) {
+                y[r] += mat->data[j];
+            }
+        }
+
         cuda_timer_stop(&htim_spmv);
 
         if (i >= 0) {
@@ -424,6 +450,7 @@ dtype_t *dispatch(CsrMatrix_t *mat, dtype_t *x) {
     cudaFree(d_cols);
     cudaFree(d_data);
     cudaFree(d_x);
+    cudaFree(d_rows_idx);
     return y;
 }
 

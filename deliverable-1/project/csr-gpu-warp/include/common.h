@@ -54,4 +54,9 @@
     b = c; \
 } while(0)
 
+/*!
+ * \brief Full bitmask used for warp primitives
+ */
+#define FULL_MASK (0xffffffff)
+
 #endif // COMMON_H
