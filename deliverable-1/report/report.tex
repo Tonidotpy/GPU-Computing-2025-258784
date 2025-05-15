@@ -1,21 +1,34 @@
 \documentclass[conference]{IEEEtran}
+\IEEEoverridecommandlockouts
 
-\usepackage[margin=1in]{geometry} % full-width
+% Packages
+\usepackage{cite}
+\usepackage{amsmath,amsfonts}
+\usepackage{algorithm}
+\usepackage{algpseudocode}
+\usepackage{graphicx}
+\usepackage{textcomp}
+\usepackage{xcolor}
+\usepackage{booktabs}
+\usepackage{adjustbox}
+\usepackage{listings}
 
-% Author info
-\title{Leveraging GPU Parallelism for Efficient CSR Sparse Matrix-Vector Multiplication}
-\author{
-    \IEEEauthorblockN{Antonio Gelain}
-    \IEEEauthorblockA{
-        \textit{Department of Information Engineering and Computer Science} \\
-        \textit{University of Trento} \\
-        Trento, Italy \\
-        antonio.gelain@studenti.unitn.it
-    }
-}
+\usepackage{verbatim}
+\usepackage{multirow}
 
+\def\BibTeX{{\rm B\kern-.05em{\sc i\kern-.025em b}\kern-.08em
+    T\kern-.1667em\lower.7ex\hbox{E}\kern-.125emX}}
 
 \begin{document}
+
+    % \title{Leveraging GPU Parallelism for Efficient CSR Sparse Matrix-Vector Multiplication}
+    % Author info
+    \title{Deliverable report \\
+    \footnotesize \textit{Antonio Gelain: Mat: 258784, \\
+    \texttt{antonio.gelain@studenti.unitn.it}, \\
+    \texttt{antonio.gelain@eagletrt.it}, \\
+    GitRepo: \texttt{https://github.com/Tonidotpy/GPU-Computing-2025-258784}}}
+
     \maketitle
 
     \begin{abstract}
@@ -26,30 +39,152 @@
         This paper will cover various implementations and optimization strategies
         used to achieve faster computation leveraging both the Graphics Processing
         Units (GPUs) and the Compressed Sparse Row (CSR) matrix format.
-
-        % TODO: Review
-        Although the CSR format is space efficient and widely used, its row-based
-        structure presents difficulties for parallel execution on GPUs.
-        Performance evaluations on a diverse set of sparse arrays drawn from
-        real-world applications demonstrate significant speed gains over basic
-        GPU implementations and competitive performance with more advanced libraries.
-        The results highlight the feasibility of CSR-based SpMV for high-performance
-        computing on GPUs, especially when combined with architecture-aware optimizations.
     \end{abstract}
 
-    \section{Introduction} 
+    \begin{IEEEkeywords}
+        Sparse Matrix, SpMV, CUDA, Parallelization, Storage Format
+    \end{IEEEkeywords}
 
+    \section{Introduction} 
+    
+    Sparse Matrix-Vector Multiplication involves multiplying a sparse matrix in which
+    most elements are zero by a dense vector.
+    Due to its low computational intensity and irregular memory access patterns,
+    SpMV is often memory-bound, making its efficient execution crucial for the overall
+    performance of many high-performance computing applications.
+
+    Parallelizing SpMV poses significant challenges, mainly for the irregular structure
+    of sparse matrices, which leads to unpredictable memory access and poor cache
+    utilization.
+    Unlike dense matrix operations, the sparsity pattern is not uniform and can vary
+    widely across applications, making load balancing across threads or processing
+    units non-trivial.
+
+    Moreover, modern heterogeneous architectures add further complexity.
+    Efficiently mapping SpMV to such platforms requires consideration of hardware-specific
+    features like warp-based execution, memory coalescing, or limited on-chip memory.
+    As a result, multiple storage formats and algorithmic variants have been developed
+    to adapt SpMV to specific hardware characteristics.
+
+    Despite its conceptual simplicity, SpMV remains a challenging and active area
+    of research in various research fields.
     
     \section{Problem Statement}
+
     Sparse Matrix-Vector multiplication is a well-known problem whose purpose
     is to calculate the product between a sparse matrix, that is, whose values
     are mostly zeros and therefore do not contribute to the final result, and a
     vector.
+    The product between a matrix $A$ of size $n \cdot m$ and a vector $x$ (which must
+    be of size $m$) gives as a result a vector $y$ of size $n$ which can be calculated
+given the following formula:
+    $$
+    y_i = \sum\limits_{j = 0}^{m} A_{ij} * x_j
+    $$
 
+    \section{Storage format}
 
+    Storing every element of large sparse matrices is not memory efficient since
+    most of the values are zeros and therefore do not contribute to the final result.
 
-    \section{Experimental setup}
+    There exists various storage formats for sparse matrices but the chosen one
+    is the Compressed Sparse Row matrix format, CSR in short.
+    The format consists of three arrays used to store the rows, columns and non-zero
+    values of the matrix, the main advantage is that the array containing the row
+    indices is constructed by sorting and creating a prefix sum of the original
+    row indices.
+
+    \section{Parallelization}
+
+    Starting from a full CPU implementation as baseline, four different CUDA implementation
+    were developed each one being a variation of the previous ones taking into
+    account a specific problem.
+
+    \subsection{One Thread Per Row}
+
+    For the first CUDA implementation, since each value of the output array can
+    be calculated independently from the others, the naive approach is to create
+    a single thread for each row which multiplies all non-zero values of the rows
+    with the corresponding input vector values and sums them together sequentially.
+
+    \subsection{Additional Sorting Kernel}
+
+    Since the CSR format requires sorting, for large matrices a lot of time is
+    is spent on constructing the row array of the matrix so as a solution a Bitonic
+    Parallel Sort algorithm was implemented to achieve better total execution time.
+
+    \subsection{One Thread Per Non-Zero}
+
+    One of the main problems of the naive implementation is the fact that if the
+    matrix consists of a small number of rows and a large number of non-zeros, a
+    low number of thread will be dispatched which has to do most of the calculations
+    and this will result in a lower number of floating point operations per second.
+
+    A possible approach to mitigate this prolem is to use a single thread for each
+    non-zero element of the matrix with the additional challenge of subdividing
+    the workload between different groups and accessing the correct values.
+
+    Another problem is concurrency caused by the access to the same memory location
+    from different threads, mainly during the sum operation which is executed sequentially
+    by the CPU.
+
+    \subsection{Warp Reduction}
+
+    To further reduce the time taken by the sequential step of the previous implementation
+    a technique known as warp reduction is used for each row of the array to parallelize
+    the sum hence increasing the performance. 
+
+    \section{State of the Art}
+
+    From the original Compressed Sparse Row (CSR) \cite{eisenstat1977csr} implementation
+    many more research has been conducted to improve its use in algorithms such as
+    Sparse Matrix-Vector Multiplication.
+
+    One of the main problems of the format was its performance which is highly dependent
+    on the used hardware and the actual structure of the matrix.
+    To achieve this, several optimized variants of CSR have been developed such as
+    CSR5 and its extension CSR5BC which improve parallelism and memory access on
+    modern GPUs using segmented sum techniques and index compression \cite{zhang2016csr5}.
+
+    The CSR \& RV format reduces memory usage by storing redundant values only once,
+    significantly lowering storage costs and boosting throughput \cite{tang2023csrrv}.
+
+    On heterogeneous systems, formats like CSR-k restructure data hierarchically
+    for better adaptability across CPUs and GPUs \cite{liu2022csrk}.
+    Auto-tuning frameworks such as AlphaSparse generate customized kernels tailored
+    to both sparsity patterns and hardware, delivering further gains \cite{yin2022alphasparse}. Additionally, emerging architectures like Processing-In-Memory (PIM) are prompting new SpMV implementations, such as SparseP, that harness in-memory computing advantages \cite{lee2022sparsep}. Together, these innovations demonstrate that while CSR remains foundational, ongoing adaptations are essential for maximizing SpMV efficiency on evolving platforms.
+
+    \section{Methodology and Contributions}\label{sec:methodology}
+
+    \section{System Description and Experimental Set-up}
+        \subsection{System Description}
+
+        \begin{table}[ht]
+            \centering
+            \begin{adjustbox}{width=\columnwidth}
+            \begin{tabular}{lllrl}
+            \toprule
+            \textbf{System} &  \textbf{Processor} & \textbf{Cores per Socket} & \textbf{RAM} & \textbf{Accelerator} \\
+            \midrule
+                edu-short & AMD EPYC 9334 32-Core Processor & 32 at 3.9 GHz & 810 GB & NVIDIA L40S \\
+            \bottomrule
+            \end{tabular}
+            \end{adjustbox}
+            \vspace{1em}
+            
+            \caption{System details}
+            \label{tab:system_description}
+        \end{table}
+
+        \subsection{Dataset description}
+
+        \subsection{Experimental Set-up}
+
+    \section{Experimental Results}
 
     \section{Conclusion}
+
+    \bibliographystyle{IEEEtran}
+    \bibliography{references}
 
 \end{document}
