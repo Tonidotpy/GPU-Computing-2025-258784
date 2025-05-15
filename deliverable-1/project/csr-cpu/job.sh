@@ -1,5 +1,5 @@
 #!/bin/bash
-#SBATCH --partition=cpu
+#SBATCH --partition=edu-short
 #SBATCH --nodes=1
 #SBATCH --ntasks=1
 #SBATCH --gres=gpu:0
@@ -9,4 +9,5 @@
 #SBATCH --output=test-%j.out
 #SBATCH --error=test-%j.err
 
-srun build/SpMV ../data/1138_bus.mtx
+MAT_FILE=$1
+srun build/SpMV $MAT_FILE

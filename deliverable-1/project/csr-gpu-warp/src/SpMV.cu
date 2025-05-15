@@ -108,6 +108,7 @@ void parse_matrix_from_file(char *path) {
     prof_timer_start(&htimer);
 
     logger_info(&hlogger, "parsing file %s\n", path);
+    printf("Running SpMV on matrix: %s\n", path);
 
     // Open file
     FILE *fp = fopen(path, "r");

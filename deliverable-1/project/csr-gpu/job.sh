@@ -10,4 +10,5 @@
 #SBATCH --error=test-%j.err
 
 module load CUDA/12.1
-srun build/SpMV ../data/1138_bus.mtx
+MAT_FILE=$1
+srun build/SpMV $MAT_FILE
