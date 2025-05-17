@@ -14,5 +14,5 @@ The project is subdivided into **two different folders**, one for the
 implementations, written mostly in *C* and the *CUDA* programming languages, and
 the other containing the *LaTeX* report based on the *IEEE* template.
 
-To compile the report, installation and linking of mutliple *LaTeX* libraries
-may be required.
+> To compile the report, installation and linking of mutliple *LaTeX* libraries
+> may be required.
