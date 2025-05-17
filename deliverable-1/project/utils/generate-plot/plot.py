@@ -17,6 +17,7 @@ def get_luminance(color):
 
 # Load data
 df = pd.read_csv('../../results/profiling.csv')
+# df = pd.read_csv('../../results/profiling_spmv_only.csv')
 df.iloc[:, 2:] *= 1000  # Convert to ms
 
 # Unique values
@@ -39,6 +40,7 @@ impl_colors = [
 impl_labels = ['CPU', 'One Thread Per Row',
                'Parallel Sort', 'One Thread Per Non-Zero', 'Warp Reduction']
 ops_labels = ['Allocation', 'I/O reads', 'Sorting', 'SpMV']
+# ops_labels = ['SpMV']
 
 fig, ax = plt.subplots(figsize=(16, 6))
 
@@ -49,6 +51,8 @@ for i, impl in enumerate(implementations):
         t = impl_data[op].values
         ax.bar(x + i, t, width=0.8, bottom=bottoms, align='edge',
                color=impl_colors[i][j], label=impl_labels[i] if j == 0 else "")
+        # ax.bar(x + i, t, width=0.8, bottom=bottoms, align='edge',
+        #        color=impl_colors[i][j + 1], label=impl_labels[i] if j == 0 else "")
         bottoms += t
 
 # Axis settings
@@ -60,17 +64,17 @@ ax.set_xticklabels(matrices, ha='left')
 legend_impl = [Patch(color=impl_colors[i][1], label=impl_labels[i])
                for i, impl in enumerate(implementations)]
 impl_legend = ax.legend(handles=legend_impl, title='Implementations',
-                        loc='upper left', bbox_to_anchor=(1.02, 1))
+                        loc='upper left', bbox_to_anchor=(0, 1))
 
 # Legend for operations
 legend_ops = [Patch(color=get_luminance(impl_colors[0][i]),
                     label=ops_labels[i]) for i, op in enumerate(ops)]
 ax.legend(handles=legend_ops, title='Operations',
-          loc='upper left', bbox_to_anchor=(1.02, 0.8))
+          loc='upper left', bbox_to_anchor=(0.13, 1))
 ax.add_artist(impl_legend)
 
 # Axis labels and title
 ax.set_ylabel('Execution Time (ms)')
-ax.set_title('Benchmark results')
+# ax.set_title('Benchmark results')
 plt.tight_layout()
 plt.show()

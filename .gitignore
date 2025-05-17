@@ -421,3 +421,5 @@ STM32Make.make
 
 ## ---------------- END MANUALLY ADDED ---------------- ##
 *.err
+*.sty
+*.def

@@ -1,8 +1,8 @@
 # Sparse Matrix-Vector Multiplication
 
-This project contains multiple implementations of the Sparse Matrix-Vector
-multiplication (SpMV) algorithm leveraging on the Compressed Sparse Row (CSR)
-matrix representation and also taking advantage of the parallelization
+This project contains multiple implementations of the **Sparse Matrix-Vector
+multiplication** (SpMV) algorithm leveraging on the **Compressed Sparse Row**
+(CSR) matrix representation and also taking advantage of the parallelization
 mechanisms offered by NVIDIA Graphic Processing Units (GPUs).
 
 ## Project structure
