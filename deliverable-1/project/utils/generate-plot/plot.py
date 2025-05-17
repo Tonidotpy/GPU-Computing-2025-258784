@@ -31,14 +31,15 @@ x = np.arange(len(matrices)) * (impl_count + gap)
 
 # Color per implementation
 impl_colors = [
-    ['#ffb2b2', '#ff7f7f', '#cc6666', '#994c4c'],
-    ['#a4d1ff', '#67b3ff', '#528fcc', '#3e6b99'],
-    ['#a6fda6', '#6bfb6b', '#56c956', '#409740'],
-    ['#fed7b0', '#fdbd7c', '#ca9763', '#98714a'],
-    ['#d7c4ff', '#bd9cff', '#977dcc', '#715e99']
+    ['#faffa3', '#f6ff65', '#c5cc51', '#94993d'],   # Yellow
+    ['#d7c4ff', '#bd9cff', '#977dcc', '#715e99'],   # Purple
+    ['#fed7b0', '#fdbd7c', '#ca9763', '#98714a'],   # Orange
+    ['#a6fda6', '#6bfb6b', '#56c956', '#409740'],   # Green
+    ['#a4d1ff', '#67b3ff', '#528fcc', '#3e6b99'],   # Blue
+    ['#ffb2b2', '#ff7f7f', '#cc6666', '#994c4c'],   # Red
 ]
-impl_labels = ['CPU', 'One Thread Per Row',
-               'Parallel Sort', 'One Thread Per Non-Zero', 'Warp Reduction']
+impl_labels = ['CPU', 'OpenMP', 'One Thread Per Row', 'Parallel Sort',
+               'One Thread Per Non-Zero', 'Warp Reduction']
 ops_labels = ['Allocation', 'I/O reads', 'Sorting', 'SpMV']
 # ops_labels = ['SpMV']
 

@@ -27,6 +27,7 @@ dependecies installed:
 - GNU Make: `make`
 - NVIDIA CUDA compiler: `nvcc`
 - GNU C Compiler: `gcc`
+- OpenMP
 
 To build the project from source first clone this repo without forgetting to
 **recursively clone** the submodules as well:

@@ -331,7 +331,6 @@ dtype_t *spmv(CsrMatrix_t *mat, dtype_t *x) {
 #pragma omp atomic
                     prof_data.flop += 2;
 
-// Safe because each thread writes to y[r], which is unique to this iteration
 #pragma omp atomic
                 y[r] += val;
 
@@ -342,7 +341,7 @@ dtype_t *spmv(CsrMatrix_t *mat, dtype_t *x) {
 #pragma omp atomic
                         prof_data.flop += 2;
 
-// Race condition possible: y[c] may be accessed by multiple threads
+// Possible race condition
 #pragma omp atomic
                     y[c] += val;
                 }

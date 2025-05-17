@@ -5,23 +5,24 @@
 \@writefile{lof}{\contentsline {figure}{\numberline {1}{\ignorespaces CSR matrix format}}{1}{}\protected@file@percent }
 \newlabel{fig:csr-format}{{1}{1}}
 \@writefile{toc}{\contentsline {section}{\numberline {IV}Parallelization}{1}{}\protected@file@percent }
-\@writefile{toc}{\contentsline {subsection}{\numberline {\mbox  {IV-A}}One Thread Per Row}{1}{}\protected@file@percent }
+\@writefile{toc}{\contentsline {subsection}{\numberline {\mbox  {IV-A}}OpenMP}{1}{}\protected@file@percent }
 \citation{eisenstat1977csr}
 \citation{zhang2016csr5}
 \citation{tang2023csrrv}
 \citation{liu2022csrk}
 \citation{yin2022alphasparse}
 \citation{lee2022sparsep}
-\@writefile{toc}{\contentsline {subsection}{\numberline {\mbox  {IV-B}}Additional Sorting Kernel}{2}{}\protected@file@percent }
-\@writefile{toc}{\contentsline {subsection}{\numberline {\mbox  {IV-C}}One Thread Per Non-Zero}{2}{}\protected@file@percent }
-\@writefile{toc}{\contentsline {subsection}{\numberline {\mbox  {IV-D}}Warp Reduction}{2}{}\protected@file@percent }
+\@writefile{toc}{\contentsline {subsection}{\numberline {\mbox  {IV-B}}One Thread Per Row}{2}{}\protected@file@percent }
+\@writefile{toc}{\contentsline {subsection}{\numberline {\mbox  {IV-C}}Additional Sorting Kernel}{2}{}\protected@file@percent }
+\@writefile{toc}{\contentsline {subsection}{\numberline {\mbox  {IV-D}}One Thread Per Non-Zero}{2}{}\protected@file@percent }
+\@writefile{toc}{\contentsline {subsection}{\numberline {\mbox  {IV-E}}Warp Reduction}{2}{}\protected@file@percent }
 \@writefile{toc}{\contentsline {section}{\numberline {V}State of the Art}{2}{}\protected@file@percent }
 \@writefile{toc}{\contentsline {section}{\numberline {VI}Methodology and Contributions}{2}{}\protected@file@percent }
 \newlabel{sec:methodology}{{VI}{2}}
 \@writefile{loa}{\contentsline {algorithm}{\numberline {1}{\ignorespaces Naive GPU SpMV kernel}}{2}{}\protected@file@percent }
 \newlabel{alg:SpMVrow}{{1}{2}}
 \@writefile{loa}{\contentsline {algorithm}{\numberline {2}{\ignorespaces Warp reduction SpMV kernel}}{2}{}\protected@file@percent }
-\newlabel{alg:SpMVrow}{{2}{2}}
+\newlabel{alg:SpMVnz}{{2}{2}}
 \@writefile{toc}{\contentsline {section}{\numberline {VII}System Description and Experimental Set-up}{3}{}\protected@file@percent }
 \@writefile{toc}{\contentsline {subsection}{\numberline {\mbox  {VII-A}}System Description}{3}{}\protected@file@percent }
 \@writefile{lot}{\contentsline {table}{\numberline {I}{\ignorespaces System details}}{3}{}\protected@file@percent }
@@ -32,6 +33,7 @@
 \@writefile{toc}{\contentsline {subsection}{\numberline {\mbox  {VII-C}}Experimental Set-up}{3}{}\protected@file@percent }
 \@writefile{toc}{\contentsline {section}{\numberline {VIII}Experimental Results}{3}{}\protected@file@percent }
 \@writefile{lof}{\contentsline {figure}{\numberline {2}{\ignorespaces Full Time Benchmark}}{3}{}\protected@file@percent }
+\newlabel{fig:full-benchmark}{{2}{3}}
 \bibstyle{IEEEtran}
 \bibdata{references}
 \bibcite{eisenstat1977csr}{1}
@@ -41,6 +43,7 @@
 \bibcite{yin2022alphasparse}{5}
 \bibcite{lee2022sparsep}{6}
 \@writefile{lof}{\contentsline {figure}{\numberline {3}{\ignorespaces SpMV Time Benchmark}}{4}{}\protected@file@percent }
+\newlabel{fig:spmv-benchmark}{{3}{4}}
 \@writefile{toc}{\contentsline {section}{\numberline {IX}Conclusion}{4}{}\protected@file@percent }
 \@writefile{toc}{\contentsline {section}{References}{4}{}\protected@file@percent }
 \gdef \@abspage@last{4}
