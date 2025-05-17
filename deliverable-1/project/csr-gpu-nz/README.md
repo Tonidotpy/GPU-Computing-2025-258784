@@ -1,4 +1,4 @@
-# SpMV CSR GPU Baseline Implementation
+# SpMV CSR GPU Non-Zero Implementation
 
 This implementation parallelize the SpMV algorithm by using one thread for each
 non-zero value of the matrix to calculate the result vector.

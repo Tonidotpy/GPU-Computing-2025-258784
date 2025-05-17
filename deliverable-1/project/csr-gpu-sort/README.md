@@ -1,4 +1,4 @@
-# SpMV CSR GPU Baseline Implementation
+# SpMV CSR GPU Sort Implementation
 
 This implementation parallelize the SpMV algorithm by using on thread for each
 row of the matrix and it also implements a Bitonic Sort to reduce the total

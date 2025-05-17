@@ -1,4 +1,4 @@
-# SpMV CSR GPU Baseline Implementation
+# SpMV CSR GPU Naive Implementation
 
 This naive implementation parallelize the SpMV algorithm by using one thread
 for each row to calculate the result vector.

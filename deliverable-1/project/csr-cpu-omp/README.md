@@ -1,10 +1,7 @@
-# SpMV CSR GPU Warp Implementation
+# SpMV CSR CPU OpenMP Implementation
 
-This implementation parallelize the SpMV algorithm by using one thread for each
-non-zero value of the matrix to calculate the result vector.
-
-To improve the performance the summation of the partial product is parallelized
-by using warp reduction primitives offered by modern NVIDIA GPU architectures.
+This implementation parallelize the naive CPU implementation using OpenMP
+preprocessor directives.
 
 ## Build From Source
 
