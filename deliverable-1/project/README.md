@@ -12,10 +12,12 @@ SpMV based on a unique concept, more info can be found inside the
 implementation folder itself.
 
 Utilities used alongside this project can be found in the `utils` directory,
-those tools are not strictly required for the project to work but they were
+those tools are **not strictly required** for the project to work but they were
 used to simplify its development.
 
 Dependencies common to all implementations can be found inside the `lib` folder.
+
+Profiling data results can be found inside the `results` directory.
 
 ## Build from source
 
@@ -27,7 +29,7 @@ dependecies installed:
 - GNU C Compiler: `gcc`
 
 To build the project from source first clone this repo without forgetting to
-recursive clone the submodules as well:
+**recursively clone** the submodules as well:
 ```
 git clone --recurse-submodules https://github.com/Tonidotpy/GPU-Computing-2025-258784.git
 ```
@@ -59,25 +61,41 @@ make <path-to-library>          # e.g. make lib/libmmio
 > by the main Makefile upon compilation, even if they should work independently
 > it is discouraged the use of them. **Use the methods shown above instead**.
 
+`make clean` can be used to remove all the compiled binaries if necessary.
+
 ## Usage
 
 A couple of useful parameters can be given to make to change the behavior of
 the projects.
 
-The `DEBUG` variable can be set to build the projects with debug information as
-follows:
+The `DEBUG` variable can be set to build the projects **with debug information**
+as follows:
 ```
 make DEBUG=1
 ```
 In this way each compiled programmed can be debugged using the appropriate tools.
 
-The `NLOGGER` variable can be set to build the projects disabling entirely the
-logger output as follows:
+The `NLOGGER` variable can be set to build the projects **disabling entirely**
+the logger output as follows:
 ```
 make NLOGGER=1
 ```
-This can be useful to get a clean report from the executable as well as to
+This can be useful to get a clean reports from the executable as well as to
 completely remove the overhead caused by it (even if it is almost negligible).
 
 Other configuration parameter can be found for each implementation inside the
 `config.h` file located in the include directory.
+
+To run the generated binary go inside an implementation folder an run the
+generated executable via **SLURM** by giving the input matrix as parameter:
+```
+sbatch job.sh <matrix.mtx>  # (e.g. sbatch job.sh 1138_bus.mtx)
+```
+
+As an alternative the executable can be run directly as follows:
+```
+./build/SpMV <matrix.mtx>   # (e.g. ./build/SpMV 1138_bus.mtx)
+```
+
+> If run on the cluster make sure to use SLURM expecially for large matrices.
+> Run the binary directly only for debug purposes and small matrices.
