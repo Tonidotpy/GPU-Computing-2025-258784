@@ -49,8 +49,8 @@
     Sparse Matrix-Vector Multiplication involves multiplying a sparse matrix in
     which most elements are zero, by a dense vector.
     Due to its low computational intensity and irregular memory access patterns,
-    SpMV is often memory-bound, making its efficient execution crucial for the
-    overall performance of many high-performance computing applications.
+    SpMV is often \textbf{memory-bound}, making its efficient execution crucial
+    for the overall performance of many high-performance computing applications.
 
     Parallelizing SpMV poses significant challenges, mainly for the structure
     of the sparse matrix itself, which leads to unpredictable memory access
@@ -60,8 +60,8 @@
     processing units difficult.
 
     Moreover, implementing SpMV into modern platforms requires consideration of
-    hardware-specific features like warp-based execution, memory coalescing, or
-    limited on-chip memory.
+    \textbf{hardware-specific features} like warp-based execution, memory
+    coalescing, or limited on-chip memory.
     As a result, multiple storage formats and algorithmic variants have been
     developed to adapt SpMV to specific hardware characteristics.
 
@@ -75,8 +75,8 @@
     are mostly zeros and therefore do not contribute to the final result, and a
     dense vector.
     The product between a matrix $A$ of size $n \cdot m$ and a vector $x$
-    (which must be of size $m$) gives as a result a vector $y$ of size $n$
-    that can be calculated given the following formula:
+    (which \textbf{must be} of size $m$) gives as a result a vector $y$ of size
+    $n$ that can be calculated given the following formula:
     $$
     y_i = \sum\limits_{j = 0}^{m} A_{ij} x_j
     $$
@@ -88,9 +88,9 @@
     since most of the values are zeros and therefore do not contribute to the
     final result.
 
-    To store sparse matrices efficiently many storage formats were and still
-    are being developed such as the Compressed Sparse Row matrix format, CSR
-    in short.
+    To store sparse matrices efficiently many storage formats were, and still
+    are, being developed such as the \textbf{Compressed Sparse Row} matrix
+    format, CSR in short.
 
     \begin{figure}[ht]
         \caption{CSR matrix format}
@@ -127,8 +127,8 @@
 
     Since the CSR format requires sorting, for large matrices a lot of time is
     spent for the construction of the row array of the matrix so as a solution
-    a Bitonic Parallel Sort algorithm was implemented to achieve faster
-    execution time.
+    a \textbf{Bitonic Parallel Sort} algorithm was implemented to achieve
+    faster execution time.
 
     \subsection{One Thread Per Non-Zero}
 
@@ -137,8 +137,8 @@
     thread for each non-zero value.
 
     The main difficulties of this approach are the subdivision of the matrix
-    into groups to balance the workload and the additional concurrency problem
-    caused by access to the same memory region between multiple threads.
+    into groups to balance the workload and the additional \textbf{concurrency}
+    problem caused by access to the same memory region between multiple threads.
 
     As a naive solution for the concurrency problem, mainly caused by the sum
     of the products, each product is stored inside the matrix itself and the
@@ -147,8 +147,8 @@
     \subsection{Warp Reduction}
 
     A better solution to the previous problem is to exploit modern warp
-    reduction primitives to parallelize the sum operations hence increasing
-    performance of the algorithm.
+    \textbf{reduction primitives} to parallelize the sum operations hence
+    increasing performance of the algorithm.
 
     \section{State of the Art}
 
@@ -156,8 +156,9 @@
     implementation many more research has been conducted to improve its use in
     algorithms such as Sparse Matrix-Vector Multiplication.
 
-    One of the main problems of the format was its performance which is highly
-    dependent on the used hardware and the actual structure of the matrix.
+    One of the main problems of the format was its performance which is
+    \textbf{highly dependent} on the used hardware and the actual structure of
+    the matrix.
     To achieve this, several optimized variants of CSR have been developed such
     as CSR5 and its extension CSR5BC which improve parallelism and memory
     access on modern GPUs using segmented sum techniques and index compression
@@ -188,12 +189,13 @@
     such as memory allocation, matrix file parsing, input vector value generation,
     etc....
 
-    For the GPU CUDA events were used instead to achieve better accuracy for
-    the elapsed time including the internal synchronization of the threads.
+    For the GPU \textbf{CUDA events} were used instead to achieve
+    \textbf{better accuracy} for the elapsed time including the internal
+    synchronization of the threads.
 
-    The naive GPU kernel implementation is expected to be slower for long row
-    matrices since the SpMV becomes almost sequential, which can be seen in the
-    following pseudo-code:
+    The naive GPU kernel implementation is expected to be \textbf{slower} for
+    long row matrices since the SpMV becomes almost sequential, which can be
+    seen in the following pseudo-code:
     \begin{algorithm}[h!]
         \caption{Naive GPU SpMV kernel}
         \algorithmicrequire~The input matrix $A$ of size $n \cdot m$ and the vector $x$ of size $m$.
@@ -212,9 +214,9 @@
     \end{algorithm}
 
     The other approach using one thread for each non-zero element is expected
-    to be more consistent across different matrices and slightly faster than
-    its naive counterpart since it is also able to parallelize the sums even if
-    the implemented algorithm can still be improved.
+    to be more \textbf{consistent} across different matrices and slightly
+    faster than its naive counterpart since it is also able to parallelize the
+    sums even if the implemented algorithm can still be improved.
     \begin{algorithm}[!ht]
         \caption{Warp reduction SpMV kernel}
         \algorithmicrequire~The input matrix $A$ of size $n \cdot m$ and the vector $x$ of size $m$.
@@ -262,7 +264,7 @@
             \item Python 3.9.18 (for the utilities) 
         \end{itemize}
 
-        The project can be compiled using the provided makefiles with GCC and
+        The project can be compiled using the provided Makefiles with GCC and
         CUDA compilers and can be run into the cluster via the SLURM workload
         manager utilities.
 
@@ -292,12 +294,13 @@
         the number of non-zero elements, which increases progressively from one
         matrix to the next.
 
-        The \texttt{heart1} matrix stands out for its higher density, with non-zero
-        values accounting to approximately 10\% of the total entries.
+        The \texttt{heart1} matrix stands out for its \textbf{higher density},
+        with non-zero values accounting to approximately 10\% of the total
+        entries.
 
         The final two matrices are asymmetric and are designed to stress test
         different dimensions: one has a large number of rows, while the other
-        has a large number of columns
+        has a large number of columns.
 
         \begin{table}[ht]
             \caption{Matrix Details}
@@ -324,7 +327,7 @@
         \subsection{Experimental Set-up}
 
         For the experimental setup, each main operation is profiled by
-        measuring its execution time.
+        measuring its \textbf{execution time}.
         
         The profiled operations include:
         \begin{enumerate}
@@ -336,22 +339,23 @@
 
         The CSR matrix is constructed only once at the start of the program.
         To enure accurate timing of the matrix-vector multiplication, four
-        initial warm-up cycles are executed and excluded from profiling.
+        initial \textbf{warm-up cycles} are executed and excluded from
+        profiling.
         At the end the average value between 10 different runs is evalueted.
 
     \section{Experimental Results}
 
     The results for the different implementations across all matrices are shown
-    in the following graph.
+    in the following graphs.
 
     A few important points should be noted:
     \begin{itemize}
         \item Results for the naive CPU and GPU implementations on larger
             matrices are missing.
-            This is because their execution time exceeded the 5-minute time
-            limit enforced by the cluster;
-        \item The Y-axis of the graph uses a logarithmic scale rather than a
-            linear one.
+            This is because their total execution time exceeded the 5-minute
+            time limit enforced by the cluster;
+        \item The Y-axis of the graph uses a \textbf{logarithmic scale} rather
+            than a linear one.
     \end{itemize}
 
     The logarithmic scale is necessary because the first five matrices increase
@@ -365,8 +369,8 @@
     \end{figure}
 
     From the results, we can observe that the CPU implementation performs
-    better on smaller matrices, primarily due to the lower overhead compared to
-    the GPU (e.g. memory allocation and kernel dispatch).
+    better on smaller matrices, primarily due to the \textbf{lower overhead}
+    compared to the GPU (e.g. memory allocation and kernel dispatch).
     However, its performance degrades rapidly as the number of non-zero
     elements increases.
 
@@ -374,8 +378,8 @@
     portion of the total time, using a Bitonic Parallel Sort considerably
     reduces overall execution time.
 
-    Other performance-impacting factors include memory allocation and data
-    transfer, especially between host and device, as well as file I/O
+    Other \textbf{performance-impacting factors} include memory allocation and
+    data transfer, especially between host and device, as well as file I/O
     operations.
     These are areas that could benefit from further optimization.
 
@@ -398,7 +402,7 @@
     implementation.
 
     The warp reduction strategy, which partially parallelizes the summation
-    process, shows limited performance improvement.
+    process, shows \textbf{limited performance improvement}.
     This is expected, as only one full reduction is performed on the device for
     each warp, while the remaining summation still occurs on the host.
     This bottleneck is especially evident in the case of the \texttt{relat8}
@@ -411,13 +415,14 @@
     matrix-vector multiplications (SpMV).
 
     While the one-thread-per-row approach generally delivers better performance,
-    the one-thread-per-non-zero implementation has potential for further
-    optimization and could be improved to achieve lower execution times.
+    the one-thread-per-non-zero implementation has potential for 
+    textbf{further optimization} and could be improved to achieve lower
+    execution times.
 
-    Looking ahead, future work could explore adaptive or hybrid algorithms that
-    dynamically select the most suitable strategy based on the specific
-    characteristics of each matrix, as well as different approaches to balance
-    the parallel operations across all the elements of the matrix.
+    Looking ahead, future work could explore \textbf{adaptive} or hybrid
+    algorithms that dynamically select the most suitable strategy based on the
+    specific characteristics of each matrix, as well as different approaches to
+    balance the parallel operations across all the elements of the matrix.
 
     \bibliographystyle{IEEEtran}
     \bibliography{references}
