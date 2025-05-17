@@ -48,11 +48,12 @@
  * \param a First variable to swap
  * \param b Second variable to swap
  */
-#define SWAP(type, a, b) do { \
-    type c = a; \
-    a = b; \
-    b = c; \
-} while(0)
+#define SWAP(type, a, b) \
+    do {                 \
+        type c = a;      \
+        a = b;           \
+        b = c;           \
+    } while (0)
 
 /*!
  * \brief Full bitmask used for warp primitives

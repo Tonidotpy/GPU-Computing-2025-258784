@@ -361,8 +361,7 @@ dtype_t *dispatch(CsrMatrix_t *mat, dtype_t *x) {
         if (i >= 0) {
             prof_data.tspmv.t[i] = cuda_timer_elapsed(&htim_spmv);
             logger_debug(&hlogger, "iteration %d: %2.5f s\n", i + 1, prof_data.tspmv.t[i]);
-        }
-        else {
+        } else {
             logger_debug(&hlogger, "warm-up %d: %2.5f s\n", TSKIP + i + 1, cuda_timer_elapsed(&htim_spmv));
         }
     }

@@ -9,7 +9,7 @@
 #include <Eigen/Sparse>
 
 #define GREEN "\033[1;32m"
-#define RED   "\033[1;31m"
+#define RED "\033[1;31m"
 #define RESET "\033[0m"
 
 namespace fmm = fast_matrix_market;
@@ -39,10 +39,11 @@ int main(int argc, char *argv[]) {
     const double epsilon = 1e-4;
     std::cout << "Norm: " << (res - y).norm() << "\n";
     if ((res - y).norm() < epsilon) {
-        std::cout << GREEN << "Results matches, the matrix-vector product is correct!!!\n" << RESET;
-    }
-    else {
-        std::cout << RED << "Results differs, the matrix-vector product is not correct!!!\n" << RESET;
+        std::cout << GREEN << "Results matches, the matrix-vector product is correct!!!\n"
+                  << RESET;
+    } else {
+        std::cout << RED << "Results differs, the matrix-vector product is not correct!!!\n"
+                  << RESET;
 
         std::ofstream res_vec_file("result.mtx");
         std::ofstream err_vec_file("error.mtx");

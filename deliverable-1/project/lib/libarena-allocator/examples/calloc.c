@@ -27,8 +27,8 @@ int main(void) {
     const int C = N + M - 1;
 
     /*! Initialization of the two signals */
-    float * a = (float *)arena_allocator_api_calloc(&harena, N, sizeof(*a));
-    float * b = (float *)arena_allocator_api_calloc(&harena, M, sizeof(*b));
+    float *a = (float *)arena_allocator_api_calloc(&harena, N, sizeof(*a));
+    float *b = (float *)arena_allocator_api_calloc(&harena, M, sizeof(*b));
 
     printf("a = [ ");
     for (int i = 0; i < N; ++i) {
@@ -44,8 +44,9 @@ int main(void) {
     printf("]\n");
 
     /*! Initialization and calculation of the convolution */
-    float * c = (float *)arena_allocator_api_calloc(&harena, C, sizeof(*c));
-    for (int i = 0; i < C; ++i) c[i] = 0.f;
+    float *c = (float *)arena_allocator_api_calloc(&harena, C, sizeof(*c));
+    for (int i = 0; i < C; ++i)
+        c[i] = 0.f;
 
     for (int i = 0; i < C; ++i) {
         for (int j = 0; j < M; ++j) {

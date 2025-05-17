@@ -20,7 +20,6 @@ extern "C" {
 #include "csr-matrix.h"
 #include "cuda-timer.h"
 
-
 LoggerHandler_t hlogger;
 ArenaAllocatorHandler_t harena;
 CsrMatrix_t mat;
@@ -343,7 +342,7 @@ dtype_t *dispatch(CsrMatrix_t *mat, dtype_t *x) {
     logger_debug(&hlogger, "cols: host %p = device %p [%s]\n", mat->cols, d_cols, mat->cols == d_cols ? "EQUAL" : "NOT EQUAL");
     logger_debug(&hlogger, "data: host %p = device %p [%s]\n", mat->data, d_data, mat->data == d_data ? "EQUAL" : "NOT EQUAL");
 
-    dtype_t * data = (dtype_t *)arena_allocator_api_calloc(&harena, sizeof(*data), mat->nz);
+    dtype_t *data = (dtype_t *)arena_allocator_api_calloc(&harena, sizeof(*data), mat->nz);
     memcpy(data, mat->data, mat->nz * sizeof(*data));
 
     const dsize_t blocks = mat->nz < MAX_THREAD_COUNT ? 1 : ceil(mat->nz / (double)MAX_THREAD_COUNT);
@@ -372,8 +371,7 @@ dtype_t *dispatch(CsrMatrix_t *mat, dtype_t *x) {
         if (i >= 0) {
             prof_data.tspmv.t[i] = cuda_timer_elapsed(&htim_spmv);
             logger_debug(&hlogger, "iteration %d: %2.5f s\n", i + 1, prof_data.tspmv.t[i]);
-        }
-        else {
+        } else {
             logger_debug(&hlogger, "warm-up %d: %2.5f s\n", TSKIP + i + 1, cuda_timer_elapsed(&htim_spmv));
         }
     }

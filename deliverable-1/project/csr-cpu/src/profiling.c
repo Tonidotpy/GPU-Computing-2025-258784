@@ -50,6 +50,5 @@ void profiling_dump(ProfilingData *data) {
         data->tspmv.total,
         mu,
         sigma,
-        throughput
-    );
+        throughput);
 }
