@@ -1,0 +1,49 @@
+{
+    "$schema": "https://raw.githubusercontent.com/platformio/platformio-core/develop/platformio/assets/schema/library.json",
+    "name": "ArenaAllocator",
+    "version": "1.0.0",
+    "description": "Simple implementation of an arena allocator suitable for all devices",
+    "keywords": [
+        "allocator"
+    ],
+    "repository": {
+        "type": "git",
+        "url": "https://github.com/eagletrt/libarena-allocator-sw"
+    },
+    "authors": [
+        {
+            "name": "Antonio Gelain",
+            "email": "antonio.gelain2@gmail.com",
+            "maintainer": true
+        }
+    ],
+    "license": "AGPL-3.0-only",
+    "frameworks": "*",
+    "platforms": "*",
+    "headers": [
+        "arena-allocator.h",
+        "arena-allocator-api.h"
+    ],
+    "examples": [
+        {
+            "name": "SingleAllocation",
+            "base": "examples",
+            "files": [
+                "alloc.c"
+            ]
+        },
+        {
+            "name": "MultipleAllocation",
+            "base": "examples",
+            "files": [
+                "calloc.c"
+            ]
+        }
+    ],
+    "export": {
+        "include": [
+            "src/**",
+            "include/**"
+        ]
+    }
+}

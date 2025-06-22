@@ -1,0 +1,142 @@
+\documentclass[conference]{IEEEtran}
+\IEEEoverridecommandlockouts
+
+% Packages
+\usepackage{cite}
+\usepackage{amsmath,amsfonts}
+\usepackage{algorithm}
+\usepackage{algpseudocode}
+\usepackage{graphicx}
+\usepackage{textcomp}
+\usepackage{xcolor}
+\usepackage{booktabs}
+\usepackage{adjustbox}
+\usepackage{listings}
+\usepackage{verbatim}
+\usepackage{multirow}
+
+\def\BibTeX{{\rm B\kern-.05em{\sc i\kern-.025em b}\kern-.08em
+    T\kern-.1667em\lower.7ex\hbox{E}\kern-.125emX}}
+
+\begin{document}
+
+    % Author info
+    \title{Deliverable report \\
+    \footnotesize \textit{Antonio Gelain: Mat: 258784, \\
+    \texttt{antonio.gelain@studenti.unitn.it}, \\
+    \texttt{antonio.gelain@eagletrt.it}, \\
+    GitRepo: \texttt{https://github.com/Tonidotpy/GPU-Computing-2025-258784}}}
+
+    \maketitle
+
+    \begin{abstract}
+
+    % GOAL
+    % Improve performance of SpMV on GPU by leveraging \textbf{shared memory} and
+    % other CUDA hardware-level features, and compare against your best
+    % implementation from Deliverable 1 and cusparse implementation.
+
+    \end{abstract}
+
+    \begin{IEEEkeywords}
+        Sparse Matrix, SpMV, CUDA, Parallelization, Storage Format
+    \end{IEEEkeywords}
+
+    \section{Introduction} 
+     
+    \section{Problem Statement}
+
+    \section{Storage format}
+
+    \section{Parallelization}
+
+    \section{State of the Art}
+
+    \section{Methodology and Contributions}\label{sec:methodology}
+
+    \section{System Description and Experimental Set-up}
+        \subsection{System Description}
+
+        For the development of the project the following requirements were used
+        inside the university cluster:
+        \begin{itemize}
+            \item SLURM 32.11.3
+            \item CUDA 12.1
+            \item GCC 12.3.0
+            \item GNU Make 4.3
+            \item OpenMP 17.0.6
+            \item Eigen 12.3.0 (for the utilities)
+            \item Python 3.9.18 (for the utilities) 
+        \end{itemize}
+
+        The project can be compiled using the provided Makefiles with GCC and
+        CUDA compilers and can be run into the cluster via the SLURM workload
+        manager utilities.
+
+        \begin{table}[ht]
+            \caption{System details}
+            \label{tab:system_description}
+            \centering
+            \begin{adjustbox}{width=\columnwidth}
+            \begin{tabular}{lllrl}
+            \toprule
+            \textbf{System} &  \textbf{Processor} & \textbf{Cores per Socket} & \textbf{RAM} & \textbf{Accelerator} \\
+            \midrule
+                laptop & Intel(R) Core(TM) i5-1035G1 CPU & 4 at 3.6 GHz & 8 GB & Intel Iris Plus Graphics G1 (Ice Lake) \\
+                baldo & Intel(R) Xeon(R) Silver 4214 CPU & 12 at 2.2 GHz & 405 GB & \\
+                edu-short & AMD EPYC 9334 32-Core Processor & 32 at 3.9 GHz & 810 GB & NVIDIA L40S \\
+            \bottomrule
+            \end{tabular}
+            \end{adjustbox}
+        \end{table}
+
+        \subsection{Dataset description}
+        
+        Eight different matrices were selected as dataset, each with specific
+        characteristics to evaluate the performance of the various
+        implementations.
+
+        The first five matrices are mostly symmetric and differ primarily in
+        the number of non-zero elements, which increases progressively from one
+        matrix to the next.
+
+        The \texttt{heart1} matrix stands out for its \textbf{higher density},
+        with non-zero values accounting to approximately 10\% of the total
+        entries.
+
+        The final two matrices are asymmetric and are designed to stress test
+        different dimensions: one has a large number of rows, while the other
+        has a large number of columns.
+
+        \begin{table}[ht]
+            \caption{Matrix Details}
+            \label{tab:matrix_details}
+            \centering
+            \begin{adjustbox}{width=\columnwidth}
+            \begin{tabular}{lrrrr}
+            \toprule
+            \textbf{Name} & \textbf{Rows} & \textbf{Columns} & \textbf{Non-Zeros} & \textbf{Symmetric} \\
+            \midrule
+                \textbf{1138\_bus} & 1,138 & 1,138 & 4,054 & Yes \\
+                \textbf{bcsstk15} & 3,948 & 3,948 & 117,816 & Yes \\
+                \textbf{bcsstk31} & 35,588 & 35,588 & 1,181,416 & Yes \\
+                \textbf{pwtk} & 217,918 & 217,918 & 11,524,431 & Yes \\
+                \textbf{cage15} & 5,154,859 & 5,154,859 & 99,199,551 & No \\
+                \textbf{heart1} & 3,557 & 3,557 & 1,385,317 & No \\
+                \textbf{relat8} & 345,688 & 12,347 & 1,334,038 & No \\
+                \textbf{connectus} & 512 & 394,792 & 1,127,525 & No \\
+            \bottomrule
+            \end{tabular}
+            \end{adjustbox}
+        \end{table}
+
+        \subsection{Experimental Set-up}
+
+    \section{Experimental Results}
+
+    \section{Conclusion}
+
+    \bibliographystyle{IEEEtran}
+    \bibliography{references}
+
+\end{document}
