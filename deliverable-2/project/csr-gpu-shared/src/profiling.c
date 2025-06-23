@@ -26,8 +26,8 @@ void profiling_dump(ProfilingData *data) {
                            "    |     4. Input:        %13.6f s        |\n"
                            "    |     5. SpMV:         %13.6f s        |\n"
                            "    |       a. Allocation: %13.6f s        |\n"
-                           "    |       b. Mean:       %13.6f s        |\n"
-                           "    |       c. Variance:   %13.6f          |\n"
+                           "    |       b. Mean:       %13g s        |\n"
+                           "    |       c. Variance:   %13g          |\n"
                            "    |                                             |\n"
                            "    |   FLOPs:             %13.6f GFLOP/s  |\n"
                            "    \\_____________________________________________/\n\n";

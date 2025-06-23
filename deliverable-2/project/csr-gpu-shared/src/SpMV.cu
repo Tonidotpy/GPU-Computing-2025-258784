@@ -25,8 +25,6 @@ ArenaAllocatorHandler_t harena;
 CsrMatrix_t mat;
 ProfilingData prof_data;
 
-__device__ __constant__ CsrMatrix_t d_mat;
-
 void output_dump(char filename[128], dtype_t *y, dsize_t count);
 
 /*!
@@ -283,7 +281,8 @@ dtype_t *generate_input_vector(dsize_t count) {
     logger_info(&hlogger, "generating input vector...\n", "");
     dtype_t *x = (dtype_t *)arena_allocator_api_calloc(&harena, sizeof(*x), count);
     for (dsize_t i = 0; i < count; ++i) {
-        x[i] = (rand() % RAND_MAX) / 1e6;
+        // x[i] = (rand() % RAND_MAX) / 1e6;
+        x[i] = 1.f;
     }
 
     prof_timer_stop(&htimer);
@@ -295,20 +294,20 @@ __global__ void partial_spmv(CsrMatrix_t *mat, dtype_t *x) {
     extern __shared__ dtype_t values[];
 
     const dsize_t idx = blockIdx.x * blockDim.x + threadIdx.x;
-    const log2n1 = 4U; /* log2(MAX_THREAD_PER_WARP_COUNT) - 1 */
+    const dsize_t log2n1 = 4U; /* log2(MAX_THREAD_PER_WARP_COUNT) - 1 */
 
     // Load multiplied value into shared memory
-    dsize_t c = mat->col[idx];
-    values[threadIdx.x] = idx >= mat->nz
-        ? values[threadIdx.x] = 0
-        : mat->data[idx] * x[c];
+    dsize_t c = mat->cols[idx];
+    values[threadIdx.x] = ((idx >= mat->nz)
+        ? 0
+        : mat->data[idx] * x[c]);
 
     // Calculate prefix sum (https://developer.nvidia.com/gpugems/gpugems3/part-vi-gpu-computing/chapter-39-parallel-prefix-sum-scan-cuda)
     // Up-sweep (reduce)
-    for (dsize_t d = 0U; d < log2n1; ++d) {
+    for (dsize_t d = 0U; d <= log2n1; ++d) {
         __syncthreads();
         if (threadIdx.x < (1U << (log2n1 - d))) {
-            dsize_t ai = (1U << d) * (2U * threadIdx.x - 1U)
+            dsize_t ai = (1U << d) * (2U * threadIdx.x + 1U) - 1U;
             dsize_t bi = ai + (1U << d);
             values[bi] += values[ai];
         }
@@ -322,10 +321,10 @@ __global__ void partial_spmv(CsrMatrix_t *mat, dtype_t *x) {
     }
 
     // Down-sweep (scan)
-    for (dsize_t d = log2n1; d >= 0U; --d) {
+    for (dint_t d = log2n1; d >= 0U; --d) {
         __syncthreads();
-        if (threadIdx.x < (1U << (log2n1 - d)) {
-            dsize_t ai = (1U << d) * (2U * threadIdx.x - 1U)
+        if (threadIdx.x < (1U << (log2n1 - d))) {
+            dsize_t ai = (1U << d) * (2U * threadIdx.x + 1U) - 1U;
             dsize_t bi = ai + (1U << d);
             dtype_t t = values[ai];
             values[ai] = values[bi];
@@ -335,12 +334,12 @@ __global__ void partial_spmv(CsrMatrix_t *mat, dtype_t *x) {
     __syncthreads();
 
     // Sum missing values
-    dtype_t x = values[threadIdx.x];
+    dtype_t val = values[threadIdx.x];
     __syncthreads(); // Wait that everything is read before writing to shared memory to avoid race condition
 
     // Last element has already been copied into global memory
     if (threadIdx.x != 0U) {
-        values[threadIdx.x - 1U] = x;
+        values[threadIdx.x - 1U] = val;
     }
 
     __syncthreads();
@@ -380,7 +379,7 @@ __global__ void sum_and_store(CsrMatrix_t *mat, dtype_t *y) {
     }
 
     // Copy result to output
-    d_y[idx] = sum; 
+    y[idx] = sum; 
 }
 
 dtype_t *dispatch(CsrMatrix_t *mat, dtype_t *x) {
@@ -398,15 +397,17 @@ dtype_t *dispatch(CsrMatrix_t *mat, dtype_t *x) {
     prof_timer_init(&htim_alloc);
     prof_timer_start(&htim_alloc);
 
+    CsrMatrix_t *d_mat;
     dsize_t *d_rows, *d_cols;
-    dtype_t *d_data, *d_x;
+    dtype_t *d_data, *d_x, *d_y;
+    cudaMallocManaged(&d_mat, sizeof(*d_mat));
     cudaMalloc(&d_rows, (mat->row_count + 1) * sizeof(*d_rows));
     cudaMalloc(&d_cols, mat->nz * sizeof(*d_cols));
     cudaMalloc(&d_data, mat->nz * sizeof(*d_data));
     cudaMalloc(&d_x, mat->col_count * sizeof(*d_x));
     cudaMalloc(&d_y, mat->row_count * sizeof(*d_y));
 
-    cudaMemcpyToSymbol(d_mat, mat, sizeof(*d_mat));
+    cudaMemcpy(d_mat, mat, sizeof(*d_mat), cudaMemcpyHostToDevice);
     cudaMemcpy(d_rows, mat->rows, (mat->row_count + 1) * sizeof(*d_rows), cudaMemcpyHostToDevice);
     cudaMemcpy(d_cols, mat->cols, mat->nz * sizeof(*d_cols), cudaMemcpyHostToDevice);
     cudaMemcpy(d_data, mat->data, mat->nz * sizeof(*d_data), cudaMemcpyHostToDevice);
@@ -447,25 +448,34 @@ dtype_t *dispatch(CsrMatrix_t *mat, dtype_t *x) {
 
         // Calculate total sum for each row
         sum_and_store<<<sum_blocks, sum_threads_per_block>>>(d_mat, d_y);
-
         cuda_timer_synchronize(&htim_spmv);
+
         cuda_timer_stop(&htim_spmv);
 
         if (i >= 0) {
             prof_data.tspmv.t[i] = cuda_timer_elapsed(&htim_spmv);
-            logger_debug(&hlogger, "iteration %d: %2.5f s\n", i + 1, prof_data.tspmv.t[i]);
+            logger_debug(&hlogger, "iteration %d: %2g s\n", i + 1, prof_data.tspmv.t[i]);
         } else {
-            logger_debug(&hlogger, "warm-up %d: %2.5f s\n", TSKIP + i + 1, cuda_timer_elapsed(&htim_spmv));
+            logger_debug(&hlogger, "warm-up %d: %2g s\n", TSKIP + i + 1, cuda_timer_elapsed(&htim_spmv));
         }
     }
 
+    cudaMemcpy(data, d_data, mat->nz * sizeof(*data), cudaMemcpyDeviceToHost);
+    const dsize_t len = 128;
+    char filename[len];
+    memset(filename, 0, len * sizeof(*filename));
+    strncpy(filename, "mat-dump", len);
+    output_dump(filename, data, mat->nz);
+
     // Copy result to host
     cudaMemcpy(y, d_y, mat->row_count * sizeof(*y), cudaMemcpyDeviceToHost);
+
 
     prof_timer_stop(&htimer);
     prof_data.tspmv.total = prof_timer_elapsed(&htimer);
 
     cuda_timer_deinit(&htim_spmv);
+    cudaFree(d_mat);
     cudaFree(d_rows);
     cudaFree(d_cols);
     cudaFree(d_data);
