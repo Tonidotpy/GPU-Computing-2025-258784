@@ -357,25 +357,25 @@ __global__ void partial_spmv(CsrMatrix_t *mat, dtype_t *x) {
 
 __global__ void sum_and_store(CsrMatrix_t *mat, dtype_t *y) { 
     const dsize_t idx = blockIdx.x * blockDim.x + threadIdx.x;
-    dsize_t k = mat->rows[idx + 1];
+    dsize_t k = mat->rows[idx + 1U];
     dsize_t prev_k = mat->rows[idx];
 
     // Sum all 
     dsize_t bi = (prev_k / MAX_THREAD_PER_WARP_COUNT) * MAX_THREAD_PER_WARP_COUNT;
     dsize_t bf = (k / MAX_THREAD_PER_WARP_COUNT) * MAX_THREAD_PER_WARP_COUNT;
     dtype_t sum = 0U;
-    for (; bi <= bf; bi += MAX_THREAD_PER_WARP_COUNT) {
-        sum += mat->data[bi + MAX_THREAD_PER_WARP_COUNT - 1];
-    }
-
-    // Subtract values of the previous rows
-    if (bi != prev_k) {
-        sum -= mat->data[prev_k - 1];
+    for (; bi < bf; bi += MAX_THREAD_PER_WARP_COUNT) {
+        sum += mat->data[bi + MAX_THREAD_PER_WARP_COUNT - 1U];
     }
 
     // Add missing values of the current row
     if (bf != k) {
-        sum += mat->data[k];
+        sum += mat->data[k - 1U];
+    }
+
+    // Subtract values of the previous rows
+    if (bi != prev_k) {
+        sum -= mat->data[prev_k - 1U];
     }
 
     // Copy result to output
