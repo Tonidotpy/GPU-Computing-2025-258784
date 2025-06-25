@@ -26,6 +26,7 @@ CsrMatrix_t mat;
 ProfilingData prof_data;
 
 void output_dump(char filename[128], dtype_t *y, dsize_t count);
+void output_dump_dsize(char filename[128], dsize_t *y, dsize_t count);
 
 /*!
  * \brief Exit point of the program
@@ -202,7 +203,7 @@ void parse_matrix_from_file(char *path) {
         prof_data.tparse.io += prof_timer_elapsed(&htim_parse);
 
         if (i % MAX(1, (mat.nz / 10)) == 0) {
-            logger_debug(&hlogger, "progress %.0f%%\n", (float)i / mat.nz * 100.f);
+            logger_info(&hlogger, "progress %.0f%%\n", (float)i / mat.nz * 100.f);
         }
 
         /*! Rows and columns indices starts from 1 */
@@ -233,7 +234,8 @@ void parse_matrix_from_file(char *path) {
     prof_timer_stop(&htimer);
     prof_data.tparse.total = prof_timer_elapsed(&htimer);
 
-    logger_debug(&hlogger, "parsing done!!!\n", "");
+    logger_debug(&hlogger, "Non-zeros: %lu\n", mat.nz);
+    logger_info(&hlogger, "parsing done!!!\n", "");
 }
 
 void construct_csr_matrix(void) {
@@ -294,7 +296,7 @@ __global__ void partial_spmv(CsrMatrix_t *mat, dtype_t *x) {
     extern __shared__ dtype_t values[];
 
     const dsize_t idx = blockIdx.x * blockDim.x + threadIdx.x;
-    const dsize_t log2n1 = 4U; /* log2(MAX_THREAD_PER_WARP_COUNT) - 1 */
+    const dsize_t log2n1 = (dsize_t)ceil(log2f(MAX_THREAD_PER_WARP_COUNT)) - 1U;
 
     // Load multiplied value into shared memory
     dsize_t c = mat->cols[idx];
@@ -312,6 +314,9 @@ __global__ void partial_spmv(CsrMatrix_t *mat, dtype_t *x) {
             values[bi] += values[ai];
         }
     }
+
+    __syncthreads();
+    mat->data[idx] = 0;
 
     // Clear last element
     if (threadIdx.x == 0U) {
@@ -337,11 +342,11 @@ __global__ void partial_spmv(CsrMatrix_t *mat, dtype_t *x) {
     dtype_t val = values[threadIdx.x];
     __syncthreads(); // Wait that everything is read before writing to shared memory to avoid race condition
 
+    // Shift every element to the left by one
     // Last element has already been copied into global memory
     if (threadIdx.x != 0U) {
         values[threadIdx.x - 1U] = val;
     }
-
     __syncthreads();
 
     // Copy prefix sum values in global memory
@@ -349,14 +354,18 @@ __global__ void partial_spmv(CsrMatrix_t *mat, dtype_t *x) {
         dsize_t k = mat->rows[idx + 1U];
         if (k > mat->rows[idx]) {
             dsize_t j = k % MAX_THREAD_PER_WARP_COUNT;
-            if (j != 0U)
+            if (j != 0U) {
                 mat->data[k - 1U] = values[j - 1U];
+                printf("(%lu,%d). [%lu - %lu (%lu)]: %f %f\n", idx, threadIdx.x, mat->rows[idx], k, j, mat->data[k - 1U], values[j - 1U]);
+            }
         }
     }
 }
 
 __global__ void sum_and_store(CsrMatrix_t *mat, dtype_t *y) { 
     const dsize_t idx = blockIdx.x * blockDim.x + threadIdx.x;
+    if (idx > mat->row_count)
+        return;
     dsize_t k = mat->rows[idx + 1U];
     dsize_t prev_k = mat->rows[idx];
 
@@ -421,7 +430,6 @@ dtype_t *dispatch(CsrMatrix_t *mat, dtype_t *x) {
 
     prof_timer_stop(&htim_alloc);
     prof_data.tspmv.allocation = prof_timer_elapsed(&htim_alloc);
-
     logger_debug(&hlogger, "rows: host %p = device %p [%s]\n", mat->rows, d_rows, mat->rows == d_rows ? "EQUAL" : "NOT EQUAL");
     logger_debug(&hlogger, "cols: host %p = device %p [%s]\n", mat->cols, d_cols, mat->cols == d_cols ? "EQUAL" : "NOT EQUAL");
     logger_debug(&hlogger, "data: host %p = device %p [%s]\n", mat->data, d_data, mat->data == d_data ? "EQUAL" : "NOT EQUAL");
@@ -430,24 +438,24 @@ dtype_t *dispatch(CsrMatrix_t *mat, dtype_t *x) {
     memcpy(data, mat->data, mat->nz * sizeof(*data));
 
     const dsize_t part_threads_per_block = MAX_THREAD_PER_WARP_COUNT;
-    const dsize_t part_blocks = mat->nz / part_threads_per_block;
+    const dsize_t part_blocks = MAX(1U, (dsize_t)ceil(mat->nz / (float)part_threads_per_block));
     logger_debug(&hlogger, "Partial SpMV Blocks/Threads: <%lu, %lu>\n", part_blocks, part_threads_per_block);
 
     const dsize_t sum_threads_per_block = MAX_THREAD_PER_WARP_COUNT;
-    const dsize_t sum_blocks = mat->row_count / part_threads_per_block;
+    const dsize_t sum_blocks = MAX(1U, (dsize_t)ceil(mat->row_count / (float)part_threads_per_block));
     logger_debug(&hlogger, "Full sum Blocks/Threads: <%lu, %lu>\n", sum_blocks, sum_threads_per_block);
 
     for (dint_t i = -TSKIP; i < TITER; ++i) {
-        cudaMemset(d_y, 0, mat->row_count * sizeof(*y));
+        cudaMemset(d_y, 0, mat->row_count * sizeof(*d_y));
         cudaMemcpy(d_data, data, mat->nz * sizeof(*d_data), cudaMemcpyHostToDevice);
 
         // Partial spmv with prefix sum
         cuda_timer_start(&htim_spmv);
         partial_spmv<<<part_blocks, part_threads_per_block, part_threads_per_block>>>(d_mat, d_x);
-        cuda_timer_synchronize(&htim_spmv);
+        // cudaDeviceSynchronize();
 
         // Calculate total sum for each row
-        sum_and_store<<<sum_blocks, sum_threads_per_block>>>(d_mat, d_y);
+        // sum_and_store<<<sum_blocks, sum_threads_per_block>>>(d_mat, d_y);
         cuda_timer_synchronize(&htim_spmv);
 
         cuda_timer_stop(&htim_spmv);
@@ -460,12 +468,18 @@ dtype_t *dispatch(CsrMatrix_t *mat, dtype_t *x) {
         }
     }
 
-    cudaMemcpy(data, d_data, mat->nz * sizeof(*data), cudaMemcpyDeviceToHost);
+    // Dump matrix non-zero values
+    cudaMemcpy(data, d_data, mat->nz * sizeof(*d_data), cudaMemcpyDeviceToHost);
     const dsize_t len = 128;
     char filename[len];
     memset(filename, 0, len * sizeof(*filename));
     strncpy(filename, "mat-dump", len);
     output_dump(filename, data, mat->nz);
+
+    // Dump matrix rows prefix sum
+    memset(filename, 0, len * sizeof(*filename));
+    strncpy(filename, "row-dump", len);
+    output_dump_dsize(filename, mat->rows, mat->row_count + 1U);
 
     // Copy result to host
     cudaMemcpy(y, d_y, mat->row_count * sizeof(*y), cudaMemcpyDeviceToHost);
@@ -484,6 +498,54 @@ dtype_t *dispatch(CsrMatrix_t *mat, dtype_t *x) {
     return y;
 }
 
+void output_dump_dsize(char filename[128], dsize_t *y, dsize_t count) {
+    const dsize_t len = 256;
+    char path[len];
+    memset(path, 0, len * sizeof(*path));
+    strncpy(path, filename, 128);
+
+    // Open output file
+    const time_t t = time(NULL);
+    struct tm *tp = localtime(&t);
+    strftime(path + strlen(path), len, "-%F-%T.mtx", tp);
+
+    FILE *fp = fopen(path, "w+");
+    if (fp == NULL) {
+        logger_error(&hlogger, strerror(errno), "");
+        return;
+    }
+
+    // Write banner
+    MM_typecode matcode;
+    mm_set_matrix(&matcode);
+    mm_set_array(&matcode);
+    mm_set_real(&matcode);
+    mm_set_general(&matcode);
+    if (mm_write_banner(fp, matcode) != 0) {
+        logger_error(&hlogger, "failed to write output banner to file\n", "");
+        fclose(fp);
+        return;
+    }
+
+    // Write size
+    if (mm_write_mtx_array_size(fp, count, 1) != 0) {
+        logger_error(&hlogger, "failed to write output array size to file\n", "");
+        fclose(fp);
+        return;
+    }
+
+    // Write data
+    for (dsize_t i = 0; i < count; ++i) {
+        if (fprintf(fp, "%lu\n", y[i]) < 0) {
+            logger_error(&hlogger, "failed to write output data to file\n", "");
+            fclose(fp);
+            return;
+        }
+    }
+
+    fclose(fp);
+
+}
 void output_dump(char filename[128], dtype_t *y, dsize_t count) {
     const dsize_t len = 256;
     char path[len];

@@ -1,3 +1,6 @@
 [submodule "deliverable-1/project/utils/check-result/fast_matrix_market"]
 	path = deliverable-1/project/utils/check-result/fast_matrix_market
 	url = git@github.com:alugowski/fast_matrix_market.git
+[submodule "deliverable-2/project/utils/check-result/fast_matrix_market"]
+	path = deliverable-2/project/utils/check-result/fast_matrix_market
+	url = git@github.com:alugowski/fast_matrix_market.git
