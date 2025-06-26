@@ -283,8 +283,9 @@ dtype_t *generate_input_vector(dsize_t count) {
     logger_info(&hlogger, "generating input vector...\n", "");
     dtype_t *x = (dtype_t *)arena_allocator_api_calloc(&harena, sizeof(*x), count);
     for (dsize_t i = 0; i < count; ++i) {
-        // x[i] = (rand() % RAND_MAX) / 1e6;
-        x[i] = 1.f;
+        x[i] = (rand() % RAND_MAX) / 1e6;
+        // DEBUG:
+        // x[i] = 1.f;
     }
 
     prof_timer_stop(&htimer);
@@ -316,14 +317,16 @@ __global__ void partial_spmv(CsrMatrix_t *mat, dtype_t *x) {
     }
 
     __syncthreads();
-    mat->data[idx] = 0;
+
+    // DEBUG: clear values not copied into global memory
+    // mat->data[idx] = 0;
 
     // Clear last element
-    if (threadIdx.x == 0U) {
+    if (threadIdx.x >= MAX_THREAD_PER_WARP_COUNT - 1U) {
         // Copy sum of element of warp in global memory
-        mat->data[idx + MAX_THREAD_PER_WARP_COUNT - 1U] = values[MAX_THREAD_PER_WARP_COUNT - 1U];
-        values[MAX_THREAD_PER_WARP_COUNT - 1U] = 0U;
-    }
+        mat->data[idx] = values[threadIdx.x];
+        values[threadIdx.x] = 0U;
+    } 
 
     // Down-sweep (scan)
     for (dint_t d = log2n1; d >= 0U; --d) {
@@ -349,15 +352,28 @@ __global__ void partial_spmv(CsrMatrix_t *mat, dtype_t *x) {
     }
     __syncthreads();
 
-    // Copy prefix sum values in global memory
-    if (idx < mat->row_count) {
-        dsize_t k = mat->rows[idx + 1U];
-        if (k > mat->rows[idx]) {
-            dsize_t j = k % MAX_THREAD_PER_WARP_COUNT;
-            if (j != 0U) {
-                mat->data[k - 1U] = values[j - 1U];
-                printf("(%lu,%d). [%lu - %lu (%lu)]: %f %f\n", idx, threadIdx.x, mat->rows[idx], k, j, mat->data[k - 1U], values[j - 1U]);
+    // Binary search to find row index with same id
+    dsize_t l = 0;
+    dsize_t r = mat->row_count;
+    while (l <= r) { 
+        dsize_t m = l + ((r - l) / 2);
+        dsize_t val = mat->rows[m];
+
+        if (val == idx + 1) {
+            // Copy prefix sum values in global memory
+            if (val > mat->rows[m - 1U] && threadIdx.x < MAX_THREAD_PER_WARP_COUNT - 1U) {
+                mat->data[idx] = values[threadIdx.x];
+                // DEBUG:
+                // printf("(%lu,%d). [%lu - %lu]: %f %f\n", idx, threadIdx.x, val, mat->rows[m - 1U], mat->data[idx], values[threadIdx.x]);
             }
+            break;
+        }
+
+        if (val > idx + 1) {
+            r = m - 1;
+        }
+        else {
+            l = m + 1;
         }
     }
 }
@@ -451,11 +467,11 @@ dtype_t *dispatch(CsrMatrix_t *mat, dtype_t *x) {
 
         // Partial spmv with prefix sum
         cuda_timer_start(&htim_spmv);
-        partial_spmv<<<part_blocks, part_threads_per_block, part_threads_per_block>>>(d_mat, d_x);
-        // cudaDeviceSynchronize();
+        partial_spmv<<<part_blocks, part_threads_per_block, part_threads_per_block * sizeof(dtype_t)>>>(d_mat, d_x);
+        cudaDeviceSynchronize();
 
         // Calculate total sum for each row
-        // sum_and_store<<<sum_blocks, sum_threads_per_block>>>(d_mat, d_y);
+        sum_and_store<<<sum_blocks, sum_threads_per_block>>>(d_mat, d_y);
         cuda_timer_synchronize(&htim_spmv);
 
         cuda_timer_stop(&htim_spmv);
@@ -468,22 +484,21 @@ dtype_t *dispatch(CsrMatrix_t *mat, dtype_t *x) {
         }
     }
 
-    // Dump matrix non-zero values
-    cudaMemcpy(data, d_data, mat->nz * sizeof(*d_data), cudaMemcpyDeviceToHost);
-    const dsize_t len = 128;
-    char filename[len];
-    memset(filename, 0, len * sizeof(*filename));
-    strncpy(filename, "mat-dump", len);
-    output_dump(filename, data, mat->nz);
+    // DEBUG: Dump matrix non-zero values
+    // cudaMemcpy(data, d_data, mat->nz * sizeof(*d_data), cudaMemcpyDeviceToHost);
+    // const dsize_t len = 128;
+    // char filename[len];
+    // memset(filename, 0, len * sizeof(*filename));
+    // strncpy(filename, "mat-dump", len);
+    // output_dump(filename, data, mat->nz);
 
-    // Dump matrix rows prefix sum
-    memset(filename, 0, len * sizeof(*filename));
-    strncpy(filename, "row-dump", len);
-    output_dump_dsize(filename, mat->rows, mat->row_count + 1U);
+    // DEBUG: Dump matrix rows prefix sum
+    // memset(filename, 0, len * sizeof(*filename));
+    // strncpy(filename, "row-dump", len);
+    // output_dump_dsize(filename, mat->rows, mat->row_count + 1U);
 
     // Copy result to host
     cudaMemcpy(y, d_y, mat->row_count * sizeof(*y), cudaMemcpyDeviceToHost);
-
 
     prof_timer_stop(&htimer);
     prof_data.tspmv.total = prof_timer_elapsed(&htimer);
