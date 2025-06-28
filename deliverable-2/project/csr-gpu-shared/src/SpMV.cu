@@ -283,9 +283,9 @@ dtype_t *generate_input_vector(dsize_t count) {
     logger_info(&hlogger, "generating input vector...\n", "");
     dtype_t *x = (dtype_t *)arena_allocator_api_calloc(&harena, sizeof(*x), count);
     for (dsize_t i = 0; i < count; ++i) {
-        x[i] = (rand() % RAND_MAX) / 1e6;
+        // x[i] = (rand() % RAND_MAX) / 1e6;
         // DEBUG:
-        // x[i] = 1.f;
+        x[i] = 1.f;
     }
 
     prof_timer_stop(&htimer);
@@ -389,8 +389,8 @@ __global__ void sum_and_store(CsrMatrix_t *mat, dtype_t *y) {
     dsize_t bi = (prev_k / MAX_THREAD_PER_WARP_COUNT) * MAX_THREAD_PER_WARP_COUNT;
     dsize_t bf = (k / MAX_THREAD_PER_WARP_COUNT) * MAX_THREAD_PER_WARP_COUNT;
     dtype_t sum = 0U;
-    for (; bi < bf; bi += MAX_THREAD_PER_WARP_COUNT) {
-        sum += mat->data[bi + MAX_THREAD_PER_WARP_COUNT - 1U];
+    for (dsize_t i = bi; i < bf; i += MAX_THREAD_PER_WARP_COUNT) {
+        sum += mat->data[i + MAX_THREAD_PER_WARP_COUNT - 1U];
     }
 
     // Add missing values of the current row
