@@ -46,4 +46,12 @@ typedef int64_t dint_t;
 /*! Type definition for time in seconds */
 typedef double second_t;
 
+/*!
+ * CSR Adaptive constants
+ */
+#define WG_SIZE (256U)
+#define NNZ_PER_WG (1024U)
+#define NUM_ROWS_STREAM (2U)
+#define NNZ_MULTIPLIER (3U)
+
 #endif // CONFIG_H

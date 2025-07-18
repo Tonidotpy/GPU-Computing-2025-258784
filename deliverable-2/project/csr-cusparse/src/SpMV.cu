@@ -6,7 +6,7 @@
 #include <errno.h>
 #include <time.h>
 #include <math.h>
-#include <cusparse>
+#include <cusparse.h>
 
 extern "C" {
 #include "config.h"
@@ -335,15 +335,15 @@ dtype_t *dispatch(CsrMatrix_t *mat, dtype_t *x) {
         d_rows,
         d_cols,
         d_data,
-        CUSPARSE_INDEX_32U,
-        CUSPARSE_INDEX_32U,
+        CUSPARSE_INDEX_32I,
+        CUSPARSE_INDEX_32I,
         CUSPARSE_INDEX_BASE_ZERO,
         CUDA_R_64F
     );
 
     // Create dense input and output vectors on device
-    cusparseCreateDnVec(&cu_x, mat->cols, d_x, CUDA_R_64F);
-    cusparseCreateDnVec(&cu_y, mat->rows, d_y, CUDA_R_64F);
+    cusparseCreateDnVec(&cu_x, mat->col_count, d_x, CUDA_R_64F);
+    cusparseCreateDnVec(&cu_y, mat->row_count, d_y, CUDA_R_64F);
 
     // Allocate buffer
     void *d_buf = nullptr;
@@ -358,7 +358,7 @@ dtype_t *dispatch(CsrMatrix_t *mat, dtype_t *x) {
         &beta,
         cu_y,
         CUDA_R_64F,
-        CUSPARSE_MV_ALG_DEFAULT,
+        CUSPARSE_SPMV_ALG_DEFAULT,
         &buf_size
     );
     cudaMalloc(&d_buf, buf_size);
@@ -398,7 +398,7 @@ dtype_t *dispatch(CsrMatrix_t *mat, dtype_t *x) {
             &beta,
             cu_y,
             CUDA_R_64F,
-            CUSPARSE_MV_ALG_DEFAULT,
+            CUSPARSE_SPMV_ALG_DEFAULT,
             d_buf
         );
 

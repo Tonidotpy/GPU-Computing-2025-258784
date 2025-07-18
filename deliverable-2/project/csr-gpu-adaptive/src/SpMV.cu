@@ -297,89 +297,178 @@ __device__ dtype_t warp_reduce(dtype_t val) {
     return val;
 }
 
-__global__ void adaptive_spmv(const CsrMatrix_t *mat, const dtype_t *x, dtype_t *y) {
-    const dsize_t block = blockIdx.x * blockDim.x;
-    const dsize_t next_block = MIN(mat->nz, (blockIdx.x + 1U) * blockDim.x);
-    const dsize_t idx = block + threadIdx.x;
-    const dsize_t nz_per_row = mat->rows[next_block] - mat->rows[block];
+__device__ void scalar_reduction(
+    const CsrMatrix_t *mat,
+    const dtype_t *x,
+    dtype_t *y,
+    const dsize_t r_first,
+    const dsize_t r_last) {
+    dsize_t local_row = r_first + threadIdx.x;
+    while (local_row < r_last) {
+        dtype_t sum = 0;
+        const dsize_t r_f = mat->rows[local_row];
+        const dsize_t r_l = mat->rows[local_row + 1U];
+        for (dsize_t i = r_f; i < r_l; ++i) {
+            sum += mat->data[i] * x[mat->cols[i]];
+        }
+        y[local_row] = sum;
+        local_row += blockDim.x;
+    }
+}
 
-    __shared__ dtype_t cache[blockDim.x];
+__device__ void logarithmic_reduction(
+    const CsrMatrix_t *mat,
+    const dtype_t *x,
+    dtype_t *y,
+    const dsize_t r_first,
+    const dsize_t r_last,
+    dtype_t *cache) {
 
-    if ((next_block - block) > 1U) {
-        // CSR-stream
-        if (threadIdx.x < nz_per_row) {
-            cache[threadIdx.x] = mat->data[idx] * x[mat->cols[idx]];
+    const dsize_t local_id = threadIdx.x;
+    const dsize_t wg_size = blockDim.x;
+    const dsize_t num_rows = r_last - r_first;
+    const dsize_t threads_per_row = 1U << (31U - __clz(MAX(1U, wg_size / num_rows))); // Round to power of two
+
+    const dsize_t r_id = local_id / threads_per_row;
+    const dsize_t thread_in_row = local_id % threads_per_row;
+    if (r_id >= num_rows)
+        return;
+
+    const dsize_t r = r_first + r_id;
+    const dsize_t r_f = mat->rows[r];
+    const dsize_t r_l = mat->rows[r + 1U];
+    const dsize_t nnz = r_l - r_f;
+    const dsize_t nnz_per_thread = (nnz + threads_per_row - 1U) / threads_per_row;
+
+    dtype_t local_sum = 0;
+    for (dsize_t i = 0U; i < nnz_per_thread; ++i) {
+        dsize_t idx = r_f + thread_in_row * nnz_per_thread + i;
+        if (idx < r_l) {
+            local_sum += mat->data[idx] * x[mat->cols[idx]];
+        }
+    }
+    cache[local_id] = local_sum;
+    __syncthreads();
+
+    for (dsize_t off = threads_per_row / 2U; off > 0U; off >>= 1U) {
+        if (thread_in_row < off) {
+            cache[local_id] += cache[local_id + off];
         }
         __syncthreads();
+    }
 
-        const dsize_t reduction_threads = prev_power_of_2(blockDim.x / (next_block - block));
-        if (reduction_threads > 1U) {
-            // Reduce all non zeros of row by multiple thread
-            const dsize_t thread_in_block = threadIdx.x % reduction_threads;
-            const dsize_t local_row = block + threadIdx.x / reduction_threads;
+    if (thread_in_row == 0) {
+        y[r] = cache[local_id];
+    }
+}
 
-            dtype_t sum = 0.0;
-            if (local_row < next_block) {
-                const dsize_t local_first = mat->rows[local_row] - mat->rows[block];
-                const dsize_t local_last = mat->rows[local_row + 1U] - mat->rows[block];
+__device__ void csr_stream(
+    const CsrMatrix_t *mat,
+    const dtype_t *x,
+    dtype_t *y,
+    const dsize_t r_first,
+    const dsize_t r_last,
+    dtype_t *cache) {
+    const dsize_t num_rows = r_last - r_first;
+    const dsize_t threads_per_row = blockDim.x / num_rows;
 
-                for (dsize_t local = local_first + thread_in_block; local < local_last; local += reduction_threads) {
-                    sum += cache[local];
-                }
-            }
-            __syncthreads();
-            cache[i] = sum;
-
-            // Each row has reduction_threads values in cache
-            for (dsize_t i = reduction_threads / 2U; i > 0; i /= 2) {
-                __syncthreads();
-
-                const bool res = (thread_in_block < i) && (threadIdx.x + i < blockDim.x);
-                if (res)
-                    sum += cache[threadIdx.x + i];
-                __syncthreads();
-                if (res)
-                    cache[threadIdx.x] = sum;
-            }
-
-            if (thread_in_block == 0U && local_row < next_block) {
-                y[local_row] = sum;
-            }
-        }
-        else {
-            dsize_t local_row = idx;
-            while (local_row < next_block) {
-                dtype_t sum = 0.0;
-                for (dsize_t i = mat->rows[idx] - block; i < mat->rows[idx + 1] - block; ++i) {
-                    sum += cache[i];
-                }
-                y[local_row] = sum;
-                local_row += blockDim.x;
-            }
-        }
+    if (threads_per_row >= NUM_ROWS_STREAM) {
+        logarithmic_reduction(mat, x, y, r_first, r_last, cache);
     } else {
-        if (nz_per_row <= 64U) {
-            // CSR-Vector
-            dsize_t lane = threadIdx.x % MAX_THREAD_PER_WARP_COUNT;
-            dsize_t local_row = idx;
-            dtype_t sum = 0.0;
-            if (local_row < mat->row_count) {
-                dsize_t r_first = mat->rows[local_row];
-                dsize_t r_last = mat->rows[local_row + 1U];
+        scalar_reduction(mat, x, y, r_first, r_last);
+    }
+}
 
-                for (dsize_t i = r_first + lane; i < r_last; i += MAX_THREAD_PER_WARP_COUNT) {
-                    sum += mat->data[i] * x[mat->cols[i]];
-                }
-            }
+__device__ void csr_vector(
+    const CsrMatrix_t *mat,
+    const dtype_t *x,
+    dtype_t *y,
+    const dsize_t row) {
+    const dsize_t local_id = threadIdx.x;
+    const dsize_t r_first = mat->rows[row];
+    const dsize_t r_last = mat->rows[row + 1U];
+    const dsize_t nnz = r_last - r_first;
 
-            sum = warp_reduce(sum);
+    __shared__ dtype_t cache[WG_SIZE];
+    dtype_t local_sum = 0;
 
-            if (lane == 0U && local_row < mat->row_count) {
-                y[local_row] = sum;
-            }
-        }
-        else {
-            // TODO: CSR-VectorL
+    for (dsize_t i = local_id; i < nnz; i += blockDim.x) {
+        const dsize_t idx = r_first + i;
+        local_sum += mat->data[idx] * x[mat->cols[idx]];
+    }
+
+    cache[local_id] = local_sum;
+    __syncthreads();
+
+    for (dsize_t stride = blockDim.x / 2U; stride > 0U; stride >>= 1U) {
+        if (local_id < stride)
+            cache[local_id] += cache[local_id + stride];
+        __syncthreads();
+    }
+    if (local_id == 0U)
+        y[row] = cache[0U];
+}
+
+__device__ void csr_vector_l(
+    const CsrMatrix_t *mat,
+    const dtype_t *x,
+    dtype_t *y,
+    const dsize_t row,
+    const dsize_t wg_id,
+    const dsize_t wg_count) {
+    const dsize_t local_id = threadIdx.x;
+    const dsize_t r_first = mat->rows[row];
+    const dsize_t r_last = mat->rows[row + 1U];
+    const dsize_t nnz = r_last - r_first;
+    const dsize_t nnz_per_wg = NNZ_PER_WG * NNZ_MULTIPLIER;
+
+    const dsize_t offset = r_first + wg_id * nnz_per_wg;
+    const dsize_t last = MIN(offset + nnz_per_wg, r_last);
+
+    dtype_t sum = 0;
+    for (dsize_t i = offset + local_id; i < last; i += blockDim.x) {
+        sum += mat->data[i] * x[mat->cols[i]];
+    }
+
+    __shared__ dtype_t cache[WG_SIZE];
+    cache[local_id] = sum;
+    __syncthreads();
+
+    for (dsize_t stride = blockDim.x / 2U; stride > 0U; stride >>= 1U) {
+        if (local_id < stride)
+            cache[local_id] += cache[local_id + stride];
+        __syncthreads();
+    }
+    if (local_id == 0U)
+        atomicAdd(&y[row], cache[0U]);
+}
+
+__global__ void adaptive_spmv(
+    const CsrMatrix_t *mat,
+    const dtype_t *x,
+    dtype_t *y,
+    const dsize_t *row_blocks,
+    const dsize_t *row_meta) {
+    __shared__ dtype_t cache[WG_SIZE];
+    const dsize_t wg_id = blockIdx.x;
+    const dsize_t r_first = row_blocks[wg_id];
+    const dsize_t r_last = row_blocks[wg_id + 1U];
+    const dsize_t num_rows = r_last - r_first;
+
+    if (num_rows >= NUM_ROWS_STREAM) {
+        csr_stream(mat, x, y, r_first, r_last, cache);
+    } else if (num_rows == 1U) {
+        const dsize_t r = r_first;
+        const dsize_t r_f = mat->rows[r];
+        const dsize_t r_l = mat->rows[r + 1U];
+        const dsize_t nnz = r_l - r_f;
+
+        if (nnz > NNZ_PER_WG * NNZ_MULTIPLIER) {
+            const dsize_t wg_count = (nnz + NNZ_PER_WG * NNZ_MULTIPLIER - 1U) / (NNZ_PER_WG * NNZ_MULTIPLIER);
+            const dsize_t local_wg_id = row_meta[wg_id] & 0xFFFF;
+            csr_vector_l(mat, x, y, row, local_wg_id, wg_count);
+        } else {
+            csr_vector(mat, x, y, row);
         }
     }
 }
