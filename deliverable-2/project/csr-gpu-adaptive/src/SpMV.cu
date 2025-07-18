@@ -1,4 +1,3 @@
-#include <iterator>
 #include <stdio.h>
 #include <stdlib.h>
 #include <signal.h>
@@ -290,11 +289,47 @@ dtype_t *generate_input_vector(dsize_t count) {
     return x;
 }
 
-__device__ dtype_t warp_reduce(dtype_t val) {
-    for (dsize_t off = warpSize / 2U; off > 0U; off /= 2U) {
-        val += __shfl_down_sync(FULL_MASK, val, off);
+void generate_row_blocks(
+    const CsrMatrix_t *mat,
+    dsize_t **row_blocks_out,
+    dsize_t **row_meta_out,
+    dsize_t *num_blocks_out) {
+    const dsize_t row_count = mat->row_count;
+    const dsize_t est_max_blocks = row_coun * 4U;
+    dsize_t *row_blocks = arena_allocator_api_calloc(&harena, sizeof(*row_blocks), est_max_blocks + 1U);
+    dsize_t *row_meta = arena_allocator_api_calloc(&harena, sizeof(*row_blocks), est_max_blocks);
+    dsize_t current_row = 0U;
+    dsize_t block_idx = 0U;
+
+    while (current_row < row_count) {
+        const dsize_t nnz = mat->rows[current_row + 1U] - mat->rows[current_row];
+
+        if (nnz > NNZ_PER_WG * NNZ_MULTIPLIER) {
+            const dsize_t wg_count = (nnz + NNZ_PER_WG * NNZ_MULTIPLIER - 1U) / (NNZ_PER_WG * NNZ_MULTIPLIER);
+            for (dsize_t w = 0U; w < wg_count; ++w) {
+                row_blocks[block_idx] = current_row;
+                row_meta[block_idx] = (current_row << 16U) | w;
+                ++block_id;
+            }
+            ++current_row;
+        } else {
+            const dsize_t first = current_row;
+            dsize_t cnt = 0U;
+
+            while (current_row < row_count && cnt < NUM_ROWS_STREAM) {
+                ++current_row;
+                ++cnt;
+            }
+            row_blocks[block_idx] = first;
+            row_meta[block_idx] = 0U;
+            ++block_id;
+        }
     }
-    return val;
+    row_blocks[block_idx] = row_count; // Final stop row
+
+    *row_blocks_out = row_blocks;
+    *row_meta_out = row_meta;
+    *num_blocks_out = block_idx;
 }
 
 __device__ void scalar_reduction(
@@ -473,7 +508,12 @@ __global__ void adaptive_spmv(
     }
 }
 
-dtype_t *dispatch(CsrMatrix_t *mat, dtype_t *x) {
+dtype_t *dispatch(
+    const CsrMatrix_t *mat,
+    const dtype_t *x,
+    const dsize_t *row_blocks,
+    const dsize_t *row_meta,
+    const dsize_t num_blocks) {
     ProfTimerHandler_t htimer;
     prof_timer_init(&htimer);
 
@@ -491,17 +531,22 @@ dtype_t *dispatch(CsrMatrix_t *mat, dtype_t *x) {
     CsrMatrix_t *d_mat;
     dsize_t *d_rows, *d_cols;
     dtype_t *d_data, *d_x;
+    dsize_t *d_row_blocks, *d_row_meta;
     cudaMallocManaged(&d_mat, sizeof(*d_mat));
     cudaMalloc(&d_rows, (mat->row_count + 1) * sizeof(*d_rows));
     cudaMalloc(&d_cols, mat->nz * sizeof(*d_cols));
     cudaMalloc(&d_data, mat->nz * sizeof(*d_data));
     cudaMalloc(&d_x, mat->col_count * sizeof(*d_x));
+    cudaMalloc(&d_row_blocks, (num_blocks + 1U) * sizeof(*d_row_blocks));
+    cudaMalloc(&d_row_meta, num_blocks * sizeof(*d_row_meta));
 
     cudaMemcpy(d_mat, mat, sizeof(*d_mat), cudaMemcpyHostToDevice);
     cudaMemcpy(d_rows, mat->rows, (mat->row_count + 1) * sizeof(*d_rows), cudaMemcpyHostToDevice);
     cudaMemcpy(d_cols, mat->cols, mat->nz * sizeof(*d_cols), cudaMemcpyHostToDevice);
     cudaMemcpy(d_data, mat->data, mat->nz * sizeof(*d_data), cudaMemcpyHostToDevice);
     cudaMemcpy(d_x, x, mat->col_count * sizeof(*d_x), cudaMemcpyHostToDevice);
+    cudaMemcpy(d_row_blocks, row_blocks, (num_blocks + 1U) * sizeof(*d_row_blocks), cudaMemcpyHostToDevice);
+    cudaMemcpy(d_row_meta, row_meta, (num_blocks + 1U) * sizeof(*d_row_meta), cudaMemcpyHostToDevice);
 
     d_mat->rows = d_rows;
     d_mat->cols = d_cols;
@@ -515,55 +560,21 @@ dtype_t *dispatch(CsrMatrix_t *mat, dtype_t *x) {
     logger_debug(&hlogger, "rows: host %p = device %p [%s]\n", mat->rows, d_rows, mat->rows == d_rows ? "EQUAL" : "NOT EQUAL");
     logger_debug(&hlogger, "cols: host %p = device %p [%s]\n", mat->cols, d_cols, mat->cols == d_cols ? "EQUAL" : "NOT EQUAL");
     logger_debug(&hlogger, "data: host %p = device %p [%s]\n", mat->data, d_data, mat->data == d_data ? "EQUAL" : "NOT EQUAL");
-
-    /* Auxiliary arrays needed for the calculation */
-    dtype_t *data = (dtype_t *)arena_allocator_api_calloc(&harena, sizeof(*data), mat->nz);
-    memcpy(data, mat->data, mat->nz * sizeof(*data));
-
-    dsize_t *rows_idx = (dsize_t *)arena_allocator_api_calloc(&harena, sizeof(*rows_idx), mat->row_count + 1);
-    dsize_t *d_rows_idx;
-    cudaMalloc(&d_rows_idx, (mat->row_count + 1) * sizeof(*d_rows_idx));
-
-    rows_idx[0] = 0;
-    for (dsize_t i = 1; i < mat->row_count + 1; ++i) {
-        rows_idx[i] = rows_idx[i - 1] + (mat->rows[i] - mat->rows[i - 1]) / MAX_THREAD_COUNT + 1;
-    }
-    cudaMemcpy(d_rows_idx, rows_idx, (mat->row_count + 1) * sizeof(*d_rows_idx), cudaMemcpyHostToDevice);
-
-    const dsize_t mul_blocks = mat->nz < MAX_THREAD_COUNT ? 1 : ceil(mat->nz / (double)MAX_THREAD_COUNT);
-    const dsize_t mul_tcount = (dsize_t)1 << (dsize_t)ceil(log2(mat->nz / (double)mul_blocks));
-    const dsize_t mul_threads_per_block = MIN(MAX_THREAD_COUNT, mul_tcount);
-    logger_debug(&hlogger, "Multiplication Blocks/Threads: <%lu, %lu>\n", mul_blocks, mul_threads_per_block);
-
-    dsize_t add_blocks = 0;
-    for (dsize_t i = 0; i < mat->row_count; ++i) {
-        add_blocks += (dsize_t)ceil((mat->rows[i + 1] - mat->rows[i]) / (double)MAX_THREAD_COUNT);
-    }
-    const dsize_t add_threads_per_block = MAX_THREAD_COUNT;
-    logger_debug(&hlogger, "Addition Blocks/Threads: <%lu, %lu>\n", add_blocks, add_threads_per_block);
+    logger_debug(&hlogger, "Adaptive SpMV Blocks/Threads: <%lu, %lu>\n", num_blocks, WG_SIZE);
     for (dint_t i = -TSKIP; i < TITER; ++i) {
         memset(y, 0, mat->row_count * sizeof(*y));
-        cudaMemcpy(d_data, data, mat->nz * sizeof(*d_data), cudaMemcpyHostToDevice);
 
         // Calculate product
         cuda_timer_start(&htim_spmv);
-        spmv_mul<<<mul_blocks, mul_threads_per_block>>>(d_mat, d_x);
+
+        adaptive_spmv<<<num_blocks, WG_SIZE>>>(
+            d_mat,
+            d_x,
+            d_y,
+            d_row_blocks,
+            d_row_meta);
+
         cuda_timer_synchronize(&htim_spmv);
-
-        // Calculate sum
-        spmv_add<<<add_blocks, add_threads_per_block>>>(d_mat, d_rows_idx);
-        cuda_timer_synchronize(&htim_spmv);
-
-        // Copy result to host
-        cudaMemcpy(mat->data, d_data, mat->nz * sizeof(*mat->data), cudaMemcpyDeviceToHost);
-
-        // Sum all partial sums
-        for (dsize_t r = 0; r < mat->row_count; ++r) {
-            for (dsize_t j = mat->rows[r]; j < mat->rows[r + 1]; j += MAX_THREAD_PER_WARP_COUNT) {
-                y[r] += mat->data[j];
-            }
-        }
-
         cuda_timer_stop(&htim_spmv);
 
         if (i >= 0) {
@@ -583,7 +594,8 @@ dtype_t *dispatch(CsrMatrix_t *mat, dtype_t *x) {
     cudaFree(d_cols);
     cudaFree(d_data);
     cudaFree(d_x);
-    cudaFree(d_rows_idx);
+    cudaFree(d_row_blocks);
+    cudaFree(d_row_meta);
     return y;
 }
 
@@ -667,13 +679,19 @@ int main(int argc, char *argv[]) {
     /*  5. Generate random vector                                            */
     dtype_t *x = generate_input_vector(mat.col_count);
 
-    /*  6. Calculate matrix-vector product                                   */
-    dtype_t *y = dispatch(&mat, x);
+    /*  6. Generate row blocks and meta arrays                               */
+    dsize_t *row_blocks;
+    dsize_t *row_meta;
+    dsize_t num_blocks;
+    generate_row_blocks(&mat, &row_blocks, &row_meta, &num_blocks);
+
+    /*  7. Calculate matrix-vector product                                   */
+    dtype_t *y = dispatch(&mat, x, row_blocks, row_meta, num_blocks);
 
     prof_timer_stop(&htimer);
     prof_data.ttotal = prof_timer_elapsed(&htimer);
 
-    /*  7. Print results                                                     */
+    /*  8. Print results                                                     */
     profiling_dump(&prof_data);
 
 #ifdef DUMP_OUTPUT
