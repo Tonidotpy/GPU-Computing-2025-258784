@@ -1,11 +1,10 @@
-# SpMV CSR GPU Non-Zero Implementation
+# SpMV CSR GPU Warp Implementation
 
 This implementation parallelize the SpMV algorithm by using one thread for each
 non-zero value of the matrix to calculate the result vector.
 
-Only the product is parallelized since this approach have concurrencty problems
-due to the concurrent access to the same memory from multiple threads, so the
-summation of the partial products is calculated sequentially using the CPU.
+To improve the performance the summation of the partial product is parallelized
+by using warp reduction primitives offered by modern NVIDIA GPU architectures.
 
 ## Build From Source
 
