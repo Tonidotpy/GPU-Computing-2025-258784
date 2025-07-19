@@ -41,7 +41,7 @@ CUFLAGS += -DNLOGGER
 endif
 
 $(BUILD_DIR)/$(TARGET): $(C_OBJECTS) $(CU_OBJECTS)
-	$(NVCC) $(C_OBJECTS) $(CU_OBJECTS) -o $@ $(LDFLAGS)
+	$(NVCC) -arch=sm_80 $(C_OBJECTS) $(CU_OBJECTS) -o $@ $(LDFLAGS)
 
 $(BUILD_DIR)/%.o: %.c $(BUILD_DIR)
 	mkdir -p $(dir $@)
@@ -49,7 +49,7 @@ $(BUILD_DIR)/%.o: %.c $(BUILD_DIR)
 
 $(BUILD_DIR)/%.o: %.cu $(BUILD_DIR)
 	mkdir -p $(dir $@)
-	$(NVCC) $(CUFLAGS) -c $< -o $@
+	$(NVCC) -arch=sm_80 $(CUFLAGS) -c $< -o $@
 
 $(BUILD_DIR):
 	mkdir -p $@

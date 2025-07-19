@@ -6,6 +6,8 @@
 #include <errno.h>
 #include <time.h>
 #include <math.h>
+#include <cuda_runtime.h>
+#include <device_atomic_functions.h>
 
 extern "C" {
 #include "config.h"
@@ -282,6 +284,8 @@ dtype_t *generate_input_vector(dsize_t count) {
     dtype_t *x = (dtype_t *)arena_allocator_api_calloc(&harena, sizeof(*x), count);
     for (dsize_t i = 0; i < count; ++i) {
         x[i] = (rand() % RAND_MAX) / 1e6;
+        // DEBUG:
+        // x[i] = 1.0;
     }
 
     prof_timer_stop(&htimer);
@@ -295,9 +299,9 @@ void generate_row_blocks(
     dsize_t **row_meta_out,
     dsize_t *num_blocks_out) {
     const dsize_t row_count = mat->row_count;
-    const dsize_t est_max_blocks = row_coun * 4U;
-    dsize_t *row_blocks = arena_allocator_api_calloc(&harena, sizeof(*row_blocks), est_max_blocks + 1U);
-    dsize_t *row_meta = arena_allocator_api_calloc(&harena, sizeof(*row_blocks), est_max_blocks);
+    const dsize_t est_max_blocks = row_count * 4U;
+    dsize_t *row_blocks = (dsize_t *)arena_allocator_api_calloc(&harena, sizeof(*row_blocks), est_max_blocks + 1U);
+    dsize_t *row_meta = (dsize_t *)arena_allocator_api_calloc(&harena, sizeof(*row_blocks), est_max_blocks);
     dsize_t current_row = 0U;
     dsize_t block_idx = 0U;
 
@@ -309,7 +313,7 @@ void generate_row_blocks(
             for (dsize_t w = 0U; w < wg_count; ++w) {
                 row_blocks[block_idx] = current_row;
                 row_meta[block_idx] = (current_row << 16U) | w;
-                ++block_id;
+                ++block_idx;
             }
             ++current_row;
         } else {
@@ -322,7 +326,7 @@ void generate_row_blocks(
             }
             row_blocks[block_idx] = first;
             row_meta[block_idx] = 0U;
-            ++block_id;
+            ++block_idx;
         }
     }
     row_blocks[block_idx] = row_count; // Final stop row
@@ -454,7 +458,6 @@ __device__ void csr_vector_l(
     const dsize_t local_id = threadIdx.x;
     const dsize_t r_first = mat->rows[row];
     const dsize_t r_last = mat->rows[row + 1U];
-    const dsize_t nnz = r_last - r_first;
     const dsize_t nnz_per_wg = NNZ_PER_WG * NNZ_MULTIPLIER;
 
     const dsize_t offset = r_first + wg_id * nnz_per_wg;
@@ -501,9 +504,9 @@ __global__ void adaptive_spmv(
         if (nnz > NNZ_PER_WG * NNZ_MULTIPLIER) {
             const dsize_t wg_count = (nnz + NNZ_PER_WG * NNZ_MULTIPLIER - 1U) / (NNZ_PER_WG * NNZ_MULTIPLIER);
             const dsize_t local_wg_id = row_meta[wg_id] & 0xFFFF;
-            csr_vector_l(mat, x, y, row, local_wg_id, wg_count);
+            csr_vector_l(mat, x, y, r, local_wg_id, wg_count);
         } else {
-            csr_vector(mat, x, y, row);
+            csr_vector(mat, x, y, r);
         }
     }
 }
@@ -530,13 +533,14 @@ dtype_t *dispatch(
 
     CsrMatrix_t *d_mat;
     dsize_t *d_rows, *d_cols;
-    dtype_t *d_data, *d_x;
+    dtype_t *d_data, *d_x, *d_y;
     dsize_t *d_row_blocks, *d_row_meta;
     cudaMallocManaged(&d_mat, sizeof(*d_mat));
     cudaMalloc(&d_rows, (mat->row_count + 1) * sizeof(*d_rows));
     cudaMalloc(&d_cols, mat->nz * sizeof(*d_cols));
     cudaMalloc(&d_data, mat->nz * sizeof(*d_data));
     cudaMalloc(&d_x, mat->col_count * sizeof(*d_x));
+    cudaMalloc(&d_y, mat->row_count * sizeof(*d_y));
     cudaMalloc(&d_row_blocks, (num_blocks + 1U) * sizeof(*d_row_blocks));
     cudaMalloc(&d_row_meta, num_blocks * sizeof(*d_row_meta));
 
@@ -562,7 +566,7 @@ dtype_t *dispatch(
     logger_debug(&hlogger, "data: host %p = device %p [%s]\n", mat->data, d_data, mat->data == d_data ? "EQUAL" : "NOT EQUAL");
     logger_debug(&hlogger, "Adaptive SpMV Blocks/Threads: <%lu, %lu>\n", num_blocks, WG_SIZE);
     for (dint_t i = -TSKIP; i < TITER; ++i) {
-        memset(y, 0, mat->row_count * sizeof(*y));
+        cudaMemset(&d_y, 0, mat->row_count);
 
         // Calculate product
         cuda_timer_start(&htim_spmv);
@@ -584,6 +588,7 @@ dtype_t *dispatch(
             logger_debug(&hlogger, "warm-up %d: %2.5f s\n", TSKIP + i + 1, cuda_timer_elapsed(&htim_spmv));
         }
     }
+    cudaMemcpy(y, d_y, mat->row_count * sizeof(*y), cudaMemcpyDeviceToHost);
 
     prof_timer_stop(&htimer);
     prof_data.tspmv.total = prof_timer_elapsed(&htimer);
