@@ -283,9 +283,9 @@ dtype_t *generate_input_vector(dsize_t count) {
     logger_info(&hlogger, "generating input vector...\n", "");
     dtype_t *x = (dtype_t *)arena_allocator_api_calloc(&harena, sizeof(*x), count);
     for (dsize_t i = 0; i < count; ++i) {
-        // x[i] = (rand() % RAND_MAX) / 1e6;
+        x[i] = (rand() % RAND_MAX) / 1e6;
         // DEBUG:
-        x[i] = 1.f;
+        // x[i] = 1.f;
     }
 
     prof_timer_stop(&htimer);

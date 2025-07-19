@@ -374,14 +374,6 @@ dtype_t *dispatch(CsrMatrix_t *mat, dtype_t *x) {
     dtype_t *data = (dtype_t *)arena_allocator_api_calloc(&harena, sizeof(*data), mat->nz);
     memcpy(data, mat->data, mat->nz * sizeof(*data));
 
-    const dsize_t part_threads_per_block = MAX_THREAD_PER_WARP_COUNT;
-    const dsize_t part_blocks = MAX(1U, (dsize_t)ceil(mat->nz / (float)part_threads_per_block));
-    logger_debug(&hlogger, "Partial SpMV Blocks/Threads: <%lu, %lu>\n", part_blocks, part_threads_per_block);
-
-    const dsize_t sum_threads_per_block = MAX_THREAD_PER_WARP_COUNT;
-    const dsize_t sum_blocks = MAX(1U, (dsize_t)ceil(mat->row_count / (float)part_threads_per_block));
-    logger_debug(&hlogger, "Full sum Blocks/Threads: <%lu, %lu>\n", sum_blocks, sum_threads_per_block);
-
     for (dint_t i = -TSKIP; i < TITER; ++i) {
         cudaMemset(d_y, 0, mat->row_count * sizeof(*d_y));
         cudaMemcpy(d_data, data, mat->nz * sizeof(*d_data), cudaMemcpyHostToDevice);
