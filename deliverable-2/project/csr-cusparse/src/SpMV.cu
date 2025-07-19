@@ -335,8 +335,8 @@ dtype_t *dispatch(CsrMatrix_t *mat, dtype_t *x) {
         d_rows,
         d_cols,
         d_data,
-        CUSPARSE_INDEX_32I,
-        CUSPARSE_INDEX_32I,
+        CUSPARSE_INDEX_64I,
+        CUSPARSE_INDEX_64I,
         CUSPARSE_INDEX_BASE_ZERO,
         CUDA_R_64F
     );
