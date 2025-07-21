@@ -1,54 +1,70 @@
 @book{eisenstat1977csr,
-  title={Yale Sparse Matrix Package. II. The Nonsymmetric Codes},
-  url={https://doi.org/10.21236/ada047725},
-  DOI={10.21236/ada047725},
-  author={Eisenstat, S. C. and Gursky, M. C. and Schultz, M. H. and Sherman, A. H.},
-  year={1977},
-  month=aug
+    title = {Yale Sparse Matrix Package. II. The Nonsymmetric Codes},
+    url = {https://doi.org/10.21236/ada047725},
+    DOI = {10.21236/ada047725},
+    author = {Eisenstat, S. C. and Gursky, M. C. and Schultz, M. H. and Sherman, A. H.},
+    year = {1977},
+    month = aug
 }
 
-@inproceedings{zhang2016csr5,
-  author    = {Zhang, Weifeng and Chen, Yuechao and Zhang, Bo and Shen, Xipeng and Xue, Jingling and Xue, Chun Jason},
-  title     = {CSR5: An Efficient Storage Format for Cross-Platform Sparse Matrix-Vector Multiplication},
-  booktitle = {Proceedings of the 29th International Workshop on Languages and Compilers for Parallel Computing (LCPC)},
-  year      = {2016},
-  pages     = {77--93},
-  publisher = {Springer},
-  doi       = {10.1007/978-3-319-64203-1_38}
+@inproceedings{isupov2021spmvhp,
+    author = "Isupov, Konstantin and Knyazkov, Vladimir and Babeshko, Ivan and Krutikov, Alexander",
+    editor = "Balandin, Dmitry and Barkalov, Konstantin and Gergel, Victor and Meyerov, Iosif",
+    title = "Computing the Sparse Matrix-Vector Product in High-Precision Arithmetic for GPU Architectures",
+    booktitle = "Mathematical Modeling and Supercomputer Technologies",
+    year = "2021",
+    publisher = "Springer International Publishing",
+    address = "Cham",
+    pages = "334--345",
+    abstract = "The multiplication of a sparse matrix by a vector (SpMV) is the main and most expensive component of iterative methods for sparse linear systems and eigenvalue problems. As rounding errors often lead to poor convergence of iterative methods, in this article we implement and evaluate the SpMV using high-precision arithmetic on graphics processing units (GPUs). We present two implementations that use the compressed sparse row (CSR) format. The first implementation is a scalar high-precision CSR kernel using one thread per matrix row. The second implementation consists of two steps. At the first step, the matrix and vector are multiplied element-by-element. The high efficiency of this step is achieved by using a residue number system, which allows all digits of a high-precision number to be computed in parallel using multiple threads. The second step is a segmented reduction of the intermediate results. Experimental evaluation demonstrates that with the same precision, our implementations are generally faster than CSR kernels built on top of existing high-precision general purpose libraries for GPUs.",
+    isbn = "978-3-030-78759-2"
 }
 
-@inproceedings{tang2023csrrv,
-  author    = {Tang, Zongxin and Zhu, Xiaolei and Wang, Liang and Song, Wenhai and Cheng, Dan and Wang, Qiang},
-  title     = {CSR\&RV: A Compressed Sparse Row Format with Reduced Value Redundancy},
-  booktitle = {Proceedings of the 19th International Conference on Algorithms and Architectures for Parallel Processing (ICA3PP)},
-  year      = {2023},
-  publisher = {Springer},
-  doi       = {10.1007/978-3-031-21395-3_5}
+@inproceedings{flegar2017balancedcsr,
+    author = "Flegar, Goran and Quintana-Ort{\'i}, Enrique S.",
+    editor = "Rivera, Francisco F. and Pena, Tom{\'a}s F. and Cabaleiro, Jos{\'e} C.",
+    title = "Balanced CSR Sparse Matrix-Vector Product on Graphics Processors",
+    booktitle = "Euro-Par 2017: Parallel Processing",
+    year = "2017",
+    publisher = "Springer International Publishing",
+    address = "Cham",
+    pages = "697--709",
+    abstract = "We propose a novel parallel approach to compute the sparse matrix-vector product (SpMV) on graphics processing units (GPUs), optimized for matrices with an irregular row distribution of the non-zero entries. Our algorithm relies on the standard CSR format to store the sparse matrix, requires an inexpensive pre-processing step, and consumes only a minor amount of additional memory compared with significantly more expensive GPU-specific sparse matrix layouts. In addition, we propose a simple heuristic to determine whether our method or the standard CSR SpMV algorithm should be used for a specific matrix. As a result, our proposal, combined with the standard CSR SpMV, can be adopted as the default choice for the implementation of SpMV in general-purpose sparse linear algebra libraries for GPUs.",
+    isbn = "978-3-319-64203-1"
 }
 
-@article{liu2022csrk,
-  author    = {Liu, Weikang and Chen, Jiajia and Lin, Guangming and Wang, Xipeng and Liu, Mingyu},
-  title     = {CSR-k: A Fast and Portable SpMV Kernel with Hierarchical Row Blocking},
-  journal   = {arXiv preprint arXiv:2203.05096},
-  year      = {2022},
-  url       = {https://arxiv.org/abs/2203.05096}
+@inproceedings{daga2015adaptivesparse,
+    author = {Daga, Mayank and Greathouse, Joseph L.},
+    title = {Structural Agnostic SpMV: Adapting CSR-Adaptive for Irregular Matrices},
+    year = {2015},
+    isbn = {9781467384889},
+    publisher = {IEEE Computer Society},
+    address = {USA},
+    url = {https://doi.org/10.1109/HiPC.2015.55},
+    doi = {10.1109/HiPC.2015.55},
+    abstract = {Sparse matrix vector multiplication (SpMV) is an important linear algebra primitive. Recent research has focused on improving the performance of SpMV on GPUs when using compressed sparse row (CSR), the most frequently used matrix storage format on CPUs. Efficient CSR-based SpMV obviates the need for other GPU-specific storage formats, thereby saving runtime and storage overheads. However, existing CSR-based SpMV algorithms on GPUs perform poorly on irregular sparse matrices, limiting their usefulness. We propose a novel approach for SpMV on GPUs which works well for both regular and irregular matrices while keeping the CSR format intact. We start with CSR-Adaptive, which dynamically chooses between two SpMV algorithms depending on the length of each row. We then add a series of performance improvements, such as a more efficient reduction technique. Finally, we add a third algorithm which uses multiple parallel execution units when operating on irregular matrices with very long rows. Our implementation dynamically assigns the best algorithm to sets of rows in order to ensure that the GPU is efficiently utilized. We effectively double the performance of CSR-Adaptive, which had previously demonstrated better performance than algorithms that use other storage formats. In addition, our implementation is 36\% faster than CSR5, the current state of the art for SpMV on GPUs.},
+    booktitle = {Proceedings of the 2015 IEEE 22nd International Conference on High Performance Computing (HiPC)},
+    pages = {64–74},
+    numpages = {11},
+    series = {HIPC '15}
 }
 
-@article{yin2022alphasparse,
-  author    = {Yin, Jingcheng and Li, Xiaonan and Li, Yun and Wang, Xipeng and Chen, Jiajia},
-  title     = {AlphaSparse: Auto-tuning and Accelerating SpMV with Machine-Designed Formats},
-  journal   = {arXiv preprint arXiv:2212.10432},
-  year      = {2022},
-  url       = {https://arxiv.org/abs/2212.10432}
+@inproceedings{liu2015csr5,
+    author = {Liu, Weifeng and Vinter, Brian},
+    year = {2015},
+    month = {03},
+    pages = {},
+    title = {CSR5: An Efficient Storage Format for Cross-Platform Sparse Matrix-Vector Multiplication},
+    doi = {10.1145/2751205.2751209}
 }
 
-@article{lee2022sparsep,
-  author    = {Lee, Seungwon and Kim, Minkyu and Joung, Minsik and Park, Jongyong and Lee, Jae W.},
-  title     = {SparseP: Toward Realistic Performance Modeling of Sparse Matrix-Vector Multiplication on Processing-in-Memory Systems},
-  journal   = {Proceedings of the ACM on Measurement and Analysis of Computing Systems (POMACS)},
-  volume    = {6},
-  number    = {1},
-  year      = {2022},
-  pages     = {1--35},
-  doi       = {10.1145/3508041}
+@inbook{harris2007prefixsum,
+    author = {Nguyen, Hubert},
+    chapter = {39},
+    title = {Gpu gems 3},
+    year = {2007},
+    isbn = {9780321545428},
+    publisher = {Addison-Wesley Professional},
+    edition = {First},
+    abstract = {“The GPU Gems series features a collection of the most essential algorithms required by Next-Generation 3D Engines.” -Martin Mittring, Lead Graphics Programmer, Crytek This third volume of the best-selling GPU Gems series provides a snapshot of today's latest Graphics Processing Unit (GPU) programming techniques. The programmability of modern GPUs allows developers to not only distinguish themselves from one another but also to use this awesome processing power for non-graphics applications, such as physics simulation, financial analysis, and even virus detection-particularly with the CUDA architecture. Graphics remains the leading application for GPUs, and readers will find that the latest algorithms create ultra-realistic characters, better lighting, and post-rendering compositing effects.Major topics include Geometry Light and Shadows Rendering Image Effects Physics Simulation GPU Computing Contributors are from the following corporations and universities:3Dfacto Adobe Systems Apple Budapest University of Technology and Economics CGGVeritas The Chinese University of Hong Kong Cornell University Crytek Czech Technical University in Prague Dartmouth College Digital Illusions Creative Entertainment Eindhoven University of Technology Electronic Arts Havok Helsinki University of Technology Imperial College London Infinity Ward Juniper Networks LaBRI\"{\i} INRIA, University of Bordeaux mental images Microsoft Research Move Interactive NCsoft Corporation NVIDIA Corporation Perpetual Entertainment Playlogic Game Factory Polytime Rainbow Studios SEGA Corporation UFRGS (Brazil) Ulm University University of California, Davis University of Central Florida University of Copenhagen University of Girona University of Illinois at Urbana-Champaign University of North Carolina Chapel Hill University of Tokyo University of WaterlooSection Editors include NVIDIA engineers: Cyril Zeller, Evan Hart, Ignacio Casta\~{n}o, Kevin Bjorke, Kevin Myers, and Nolan Goodnight.The accompanying DVD includes complementary examples and sample programs.}
 }
