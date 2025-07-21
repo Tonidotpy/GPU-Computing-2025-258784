@@ -277,41 +277,6 @@
     per group. 
 
     \section{Experimental Setup \& Performance Analysis}
-        \subsection{System Description}
-
-        For the development of the project the following requirements were used
-        inside the university cluster:
-        \begin{itemize}
-            \item SLURM 32.11.3
-            \item CUDA 12.1
-            \item GCC 12.3.0
-            \item GNU Make 4.3
-            \item OpenMP 17.0.6
-            \item Eigen 12.3.0 (for the utilities)
-            \item Python 3.9.18 (for the utilities) 
-        \end{itemize}
-
-        The project can be compiled using the provided Makefiles with GCC and
-        CUDA compilers and can be run into the cluster via the SLURM workload
-        manager utilities.
-
-        \begin{table}[ht]
-            \caption{System details}
-            \label{tab:system_description}
-            \centering
-            \begin{adjustbox}{width=\columnwidth}
-            \begin{tabular}{lllrl}
-            \toprule
-            \textbf{System} &  \textbf{Processor} & \textbf{Cores per Socket} & \textbf{RAM} & \textbf{Accelerator} \\
-            \midrule
-                laptop & Intel(R) Core(TM) i5-1035G1 CPU & 4 at 3.6 GHz & 8 GB & Intel Iris Plus Graphics G1 (Ice Lake) \\
-                baldo & Intel(R) Xeon(R) Silver 4214 CPU & 12 at 2.2 GHz & 405 GB & \\
-                edu-short & AMD EPYC 9334 32-Core Processor & 32 at 3.9 GHz & 810 GB & NVIDIA L40S \\
-            \bottomrule
-            \end{tabular}
-            \end{adjustbox}
-        \end{table}
-
         \subsection{Dataset description}
         
         \textbf{Eight} different matrices were selected as dataset, each with
@@ -340,11 +305,103 @@
             \end{adjustbox}
         \end{table}
 
-        \subsection{Experimental Set-up}
+        \subsection{Results \& Visualization}
 
-    \section{Experimental Results}
+        Figure \ref{fig:kernel-duration} clearly shows that the cuSPARSE
+        implementation outperforms all other algorithms in terms of
+        \textbf{execution time}, as expected from a \textit{state-of-the-art}
+        library.
+
+        \begin{figure}[ht]
+            \centering
+            \includegraphics[width=\linewidth]{kernel-duration.png}
+            \caption{Kernel Execution Time}
+            \label{fig:kernel-duration}
+        \end{figure}
+
+        Special consideration should be given to the first deliverable’s
+        implementation, where part of the computation is performed
+        \textbf{outside} the kernel.
+        As a result, the measured kernel execution time does not reflect the
+        total time required for the operation, which is \textbf{significantly
+        slower} than the others.
+
+        This limitation is also evident in the low compute throughput shown in
+        figure \ref{fig:kernel-compute-throughput}, and the high memory
+        throughput in figure \ref{fig:kernel-memory-throughput}, as large
+        amounts of data must be transferred back to the host to complete the
+        calculation.
+
+        \begin{figure}[ht]
+            \centering
+            \includegraphics[width=\linewidth]{kernel-compute-throughput.png}
+            \caption{Kernel Compute Throughput}
+            \label{fig:kernel-compute-throughput}
+        \end{figure}
+
+        While the adaptive implementation appears to outperform the shared
+        memory version for matrices with long rows and low sparsity, the shared
+        memory approach is generally \textbf{faster} on average.
+        For the largest matrix tested, it offers up to a 60\% improvement.
+
+        Interestingly, cuSPARSE demonstrates relatively low compute throughput
+        compared to the adaptive method, which achieves up to 80\% utilization
+        in most cases.
+        
+        The compute throughput of the shared memory implementation is
+        comparable to that of cuSPARSE, with a few exceptions as shown in
+        figure \ref{fig:kernel-compute-throughput}.
+
+        \begin{figure}[ht]
+            \centering
+            \includegraphics[width=\linewidth]{kernel-memory-throughput.png}
+            \caption{Kernel Memory Throughput}
+            \label{fig:kernel-memory-throughput}
+        \end{figure}
+
+        In terms of memory throughput, the adaptive implementation typically
+        exhibits higher values than the other methods, primarily due to its use
+        of \textbf{auxiliary arrays}.
+        However, it tends to perform better on larger matrices.
+
+        On the other hand, the shared memory implementation show memory
+        throughput levels roughly similar to cuSPARSE on average.
+        
+        Lastly, as previously mentioned, the initial deliverable’s
+        implementation incurs very high memory throughput due to the
+        significant amount of data transferred back to the host to complete the
+        SpMV operation.
 
     \section{Conclusion}
+
+    This report explored multiple CUDA-based implementations of the Sparse
+    Matrix-Vector Multiplication (SpMV) algorithm using the Compressed Sparse
+    Row (CSR) format, comparing them to a prior baseline and NVIDIA's cuSPARSE
+    library.
+
+    Two new \textbf{optimized versions} were introduced: a shared memory
+    approach leveraging partial prefix sums, and an adaptive implementation
+    that selects different strategies based on row density.
+
+    Experimental results demonstrate that while cuSPARSE remains the best
+    overall, the custom shared memory implementation \textbf{consistently}
+    delivers strong performance, outperforming the previous deliverable and,
+    in some cases, approaching cuSPARSE-level results.
+
+    In particular, it excels on large matrices, achieving up to 60\%
+    performance improvement over the adaptive method.
+
+    The adaptive implementation, though generally slower on average, showed
+    particular advantages in throughput thanks to its \textbf{dynamic load
+    balancing} and strategic kernel selection.
+
+    In conclusion even if cuSPARSE outpuerformed the other two implementations
+    there is still room for improvement since the adaptive method can be
+    improved by \textbf{carefull tuning} and the shared memory approach using
+    prefix sums can also be optimized exploiting different hardware
+    accellerated mechanisms.
+    Further work can also be done trying \textbf{advanced matrix formats} like
+    ELL or HYB to push performance even further.
 
     \bibliographystyle{IEEEtran}
     \bibliography{references}

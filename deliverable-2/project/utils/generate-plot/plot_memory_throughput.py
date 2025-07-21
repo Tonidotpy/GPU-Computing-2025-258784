@@ -1,10 +1,12 @@
-from matplotlib.patches import Patch
 import os
 import glob
 import pandas as pd
 import matplotlib.pyplot as plt
 import numpy as np
 import matplotlib
+
+font = {'size': 16}
+matplotlib.rc('font', **font)
 matplotlib.use('qt5agg')
 
 # --- CONFIGURATION ---
