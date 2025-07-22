@@ -1,10 +1,16 @@
-# SpMV CSR GPU Warp Implementation
+# SpMV CSR GPU Adaptive Implementation
 
-This implementation parallelize the SpMV algorithm by using one thread for each
-non-zero value of the matrix to calculate the result vector.
+This implementation uses a **load balancing** mechanism by adaptively choosing
+the best method to calculate the matrix-vector product based on the amount of
+non-zero values for each rows.
 
-To improve the performance the summation of the partial product is parallelized
-by using warp reduction primitives offered by modern NVIDIA GPU architectures.
+Three different methods are used:
+1. CSR-Stream: used for batches of **multiple rows**, process rows efficiently
+    using either scalar or logarithmic reduction
+2. CSR-VectorL: used for **single dense rows**, utilizing mutliple warps and
+    atomic accumulation operations
+3. CSR-Vector: applied to single rows that are not dense enough to justify
+    warp-level parallelism
 
 ## Build From Source
 
@@ -25,3 +31,6 @@ such as:
 - The type used for matrices and vectors values;
 - The type used for integer data such as indices or sizes;
 - The type used for storing the profiled times.
+- The number of thread per workgroup
+- The number of non-zero per workgroup as well as a multiplier
+- The minimum number of rows to use the CSR-Stream method

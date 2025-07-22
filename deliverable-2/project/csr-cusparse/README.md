@@ -1,6 +1,6 @@
 # CuSPARSE SpMV
 
-Implementation using cuSPARSE, the CUDA sparse matrix library.
+Implementation using **cuSPARSE**, the CUDA sparse matrix library.
 
 ## Build From Source
 
